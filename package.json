@@ -7,7 +7,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "dev": "concurrently -k -n ANGULAR,SERVER -c blue,green \"ng serve\" \"node server/server.js\""
+    "dev": "concurrently -k -n ANGULAR,SERVER -c blue,green \"ng serve\" \"node server/server.js\"",
+    "postinstall": "npm install --prefix server"
   },
   "private": true,
   "packageManager": "npm@11.16.0",

@@ -4,45 +4,54 @@ An interactive multimedia kiosk application for the Mount Pinatubo 1991 Eruption
 
 ---
 
-## 🚀 Quick Start (Running from Downloaded ZIP)
+## 🚀 Quick Start
 
-If you downloaded this project as a ZIP from GitHub:
+### 1. Clone or Download the Project
 
-### 1. Extract the ZIP
-Extract the downloaded ZIP archive into any folder on your computer.
+```bash
+git clone https://github.com/canlasebastian/mtpinatubo_kiosk.git
+cd mtpinatubo_kiosk
+```
 
 ### 2. Install Dependencies
-Open a terminal in the project directory and run:
 
 ```bash
 npm install
 ```
-> **Note:** The `postinstall` script automatically installs both the Angular kiosk dependencies and the server proxy dependencies.
 
-### 3. (Optional) Configure Gemini AI Guide
-The kiosk's interactive exhibits, 3D simulations, and historical archives work **100% offline out-of-the-box**.
+> **Note:** This automatically installs both the Angular frontend dependencies and the backend server dependencies in one step.
 
-If you wish to enable the **Apo Namalyari AI Guide** chatbot:
-1. In the `server/` directory, make a copy of `.env.example` named `.env`:
-   ```bash
-   cp server/.env.example server/.env
-   ```
-2. Open `server/.env` in any text editor and add your Google Gemini API key:
-   ```env
-   GEMINI_API_KEY=your_actual_gemini_api_key
-   PORT=3001
-   ```
+### 3. Configure the AI Guide (Required for AI chatbot, optional otherwise)
+
+The kiosk's interactive exhibits, 3D simulations, and historical archives work **100% offline** without any configuration.
+
+To enable the **Apo Namalyari AI Guide** chatbot, create a `.env` file in the **project root**:
+
+```bash
+# Windows (Command Prompt)
+copy .env.example .env
+
+# Windows (PowerShell) / macOS / Linux
+cp .env.example .env
+```
+
+Then open `.env` and fill in your key:
+
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+PORT=3001
+```
+
+> Get a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
 
 ### 4. Run the Application
-To run both the Angular kiosk frontend and the server proxy concurrently:
 
 ```bash
 npm run dev
 ```
 
-Once started:
-- Open your browser to **`http://localhost:4200`** to view the kiosk.
-- The server proxy runs in the background at **`http://localhost:3001`**.
+- Angular frontend → **`http://localhost:4200`**
+- AI proxy server → **`http://localhost:3001`**
 
 ---
 
