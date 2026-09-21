@@ -1,7 +1,31 @@
-import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import { GoogleGenAI } from "@google/genai";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Explicitly look for .env in server directory, root directory, or .env.txt (common Windows extension issue)
+const envLocations = [
+  path.join(__dirname, ".env"),
+  path.join(__dirname, ".env.txt"),
+  path.join(__dirname, "..", ".env"),
+  path.resolve(process.cwd(), ".env")
+];
+
+for (const envPath of envLocations) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+  }
+}
+
+// Strip any accidental quotes or whitespace
+if (process.env.GEMINI_API_KEY) {
+  process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY.replace(/^["']|["']$/g, "").trim();
+}
 
 const app = express();
 const port = process.env.PORT || 3001;
