@@ -1,208 +1,86 @@
 <div class="page-wrap flex flex-col h-screen">
   <div class="game-host flex-1 min-h-0 w-full relative">
-    <div *ngIf="!gameStarted" class="welcome-overlay flex flex-col items-center justify-center h-full w-full text-center px-8 relative overflow-hidden">
+    <div *ngIf="!gameStarted" class="welcome-overlay">
 
-      <!-- Upper-Left Museum Home Button -->
+      <!-- Museum Home button (top-left) -->
       <button (click)="goHome()" class="home-btn" aria-label="Back to exhibit menu">
         <i class="fa-solid fa-house"></i>
-        <span class="home-tooltip">MENU</span>
+        <span class="home-label">Menu</span>
       </button>
 
-      <!-- ══ Living backdrop ══
-           Every layer below is decorative and non-interactive, ordered
-           back-to-front: sky, distant ranges, weather, near ridge, so the
-           parallax drift reads as real depth. -->
-      <div class="sky-stars" aria-hidden="true"></div>
-      <div class="sky-aurora" aria-hidden="true"></div>
-      <div class="storm-flash" aria-hidden="true"></div>
+      <!-- ══ Backdrop: the storm at night ══
+           Mt. Pinatubo in the game's own style, on a dark monsoon night.
+           Heavy rain in layers, fog over the plain, and lightning that
+           lights the whole valley for a moment. The only warm light is
+           the lahar's embers and the town's windows (both inside
+           welcome_scene.svg). All decorative and aria-hidden.
+           Back to front: sky, lightning bolt, clouds, the scene, fog,
+           far rain, lightning flash, near rain. -->
+      <div class="sky" aria-hidden="true"></div>
 
-      <div class="ridge ridge-far" aria-hidden="true"></div>
+      <svg class="bolt" viewBox="0 0 80 260" aria-hidden="true">
+        <path d="M46,0 L30,92 L48,96 L22,176 L40,180 L10,260 L62,150 L44,146 L70,74 L50,70 L64,0 Z"
+              fill="#eef4ff" stroke="#9fb8ff" stroke-width="3" stroke-linejoin="round"/>
+      </svg>
 
-      <!-- Mt. Pinatubo.
-           Drawn from the real massif rather than a storybook cone: after the
-           1991 eruption the summit was blown off, leaving a broad, low,
-           shield-like mountain with a 2.5 km caldera scooped out of the top.
-           It doesn't stand alone either — it sits in the Zambales range, so
-           the sharper subsidiary peaks (Negron to the left, Cuadrado to the
-           right) and the layered ridgelines behind it are part of the
-           silhouette. The flanks carry the deep radial gullies that the
-           post-eruption ash slopes are famous for. -->
-      <div class="volcano" aria-hidden="true">
-        <svg class="volcano-svg" viewBox="0 0 1200 420" preserveAspectRatio="none"
-             xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="massifFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#2b3d5c"/>
-              <stop offset="45%"  stop-color="#141f36"/>
-              <stop offset="100%" stop-color="#060b15"/>
-            </linearGradient>
-            <linearGradient id="massifLit" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%"   stop-color="#ffb05c" stop-opacity="0.30"/>
-              <stop offset="30%"  stop-color="#ea580c" stop-opacity="0.13"/>
-              <stop offset="60%"  stop-color="#000000" stop-opacity="0"/>
-            </linearGradient>
-            <linearGradient id="peakFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#22314c"/>
-              <stop offset="100%" stop-color="#0a1120"/>
-            </linearGradient>
-            <linearGradient id="rangeFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#3a4d73"/>
-              <stop offset="100%" stop-color="#1b2740"/>
-            </linearGradient>
-            <linearGradient id="rimLight" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stop-color="#fcd9a0" stop-opacity="0"/>
-              <stop offset="40%"  stop-color="#fcd9a0" stop-opacity="0.75"/>
-              <stop offset="62%"  stop-color="#ffe9c2" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#fcd9a0" stop-opacity="0"/>
-            </linearGradient>
-            <linearGradient id="gullyGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stop-color="#f8b878" stop-opacity="0.30"/>
-              <stop offset="45%"  stop-color="#7c2d12" stop-opacity="0.12"/>
-              <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-            </linearGradient>
-          </defs>
-
-          <!-- Layered Zambales ridgelines receding behind the massif -->
-          <path class="range-back" fill="url(#rangeFill)"
-                d="M0,420 L0,338 L58,312 L104,332 L163,296 L214,322 L268,286
-                   L322,314 L382,280 L436,308 L498,272 L556,300 L616,268
-                   L674,298 L736,266 L792,296 L850,270 L908,300 L966,274
-                   L1024,304 L1086,278 L1140,306 L1200,282 L1200,420 Z"/>
-
-          <!-- Subsidiary peaks: Negron (left) and Cuadrado (right) -->
-          <path fill="url(#peakFill)"
-                d="M150,420 L232,268 L268,300 L318,212 L372,286 L410,258 L470,420 Z"/>
-          <path fill="url(#peakFill)"
-                d="M760,420 L836,262 L878,300 L926,232 L972,292 L1016,268 L1090,420 Z"/>
-
-          <!-- The massif: broad, low, and asymmetric, with the caldera
-               scooped out of the summit plateau. -->
-          <path class="massif" fill="url(#massifFill)"
-                d="M0,420
-                   L52,398 L118,378 L186,360 L252,336 L306,314
-                   L356,288 L400,262 L444,230 L484,196 L516,162
-                   L536,138 L548,126
-                   L572,134 L600,141 L630,135 L654,124
-                   L672,132 L698,156 L728,188 L762,218
-                   L802,248 L848,274 L894,296 L946,318
-                   L1012,342 L1082,366 L1146,390 L1200,420 Z"/>
-
-          <!-- Warm light spilling from the caldera across the lit flank -->
-          <path class="massif-lit" fill="url(#massifLit)"
-                d="M0,420
-                   L52,398 L118,378 L186,360 L252,336 L306,314
-                   L356,288 L400,262 L444,230 L484,196 L516,162
-                   L536,138 L548,126 L572,134 L600,141
-                   L600,420 Z"/>
-
-          <!-- Radial erosion gullies down the ash flanks -->
-          <g class="gullies" stroke="url(#gullyGrad)" fill="none" stroke-linecap="round">
-            <path d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="3"/>
-            <path d="M572,152 Q556,232 534,308 Q518,366 508,420" stroke-width="2.2"/>
-            <path d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="2.6"/>
-            <path d="M622,152 Q640,232 664,306 Q682,364 696,420" stroke-width="2.2"/>
-            <path d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="3"/>
-            <path d="M534,144 Q486,210 428,272 Q384,320 344,366" stroke-width="1.8"/>
-            <path d="M664,144 Q712,208 772,268 Q818,314 860,358" stroke-width="1.8"/>
-          </g>
-
-          <!-- Lahar descending the gullies. Reuses the exact gully path data
-               above, so the flows track the terrain the artwork already
-               shows. Each is a dashed stroke whose offset animates in one
-               direction only, which is what makes the material read as
-               travelling DOWN the mountain and never back up it. -->
-          <g class="lahar-flows" fill="none" stroke-linecap="round">
-            <path class="lahar lf1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="5"/>
-            <path class="lahar lf2" d="M572,152 Q556,232 534,308 Q518,366 508,420" stroke-width="3.6"/>
-            <path class="lahar lf3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="4.2"/>
-            <path class="lahar lf4" d="M622,152 Q640,232 664,306 Q682,364 696,420" stroke-width="3.6"/>
-            <path class="lahar lf5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="5"/>
-          </g>
-          <!-- Soft halo: a wide translucent stroke under the cores, giving
-               the heat bloom without a per-frame filter pass. -->
-          <g class="lahar-halos" fill="none" stroke-linecap="round">
-            <path class="lahar-glow lf1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="13"/>
-            <path class="lahar-glow lf3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="11"/>
-            <path class="lahar-glow lf5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="13"/>
-          </g>
-
-          <!-- The glowing core, a narrower stroke riding the same paths -->
-          <g class="lahar-cores" fill="none" stroke-linecap="round">
-            <path class="lahar-core lc1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="1.8"/>
-            <path class="lahar-core lc3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="1.5"/>
-            <path class="lahar-core lc5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="1.8"/>
-          </g>
-
-          <!-- Crest rim-light picking out the caldera edge -->
-          <path class="rim-light" fill="none" stroke="url(#rimLight)" stroke-width="2.6"
-                d="M484,196 L516,162 L536,138 L548,126 L572,134 L600,141
-                   L630,135 L654,124 L672,132 L698,156 L728,188"/>
-
-          <!-- The caldera bowl itself -->
-          <ellipse class="caldera-floor" cx="601" cy="136" rx="52" ry="9" fill="#05070d" opacity="0.85"/>
+      <div class="clouds clouds-back" aria-hidden="true">
+        <svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMin slice" xmlns="http://www.w3.org/2000/svg">
+          <path d="M-60,-10 L1260,-10 L1260,250 L-60,250 Z M-112,252 a72,72 0 1 1 144,0 a72,72 0 1 1 -144,0 M-55,255 a90,90 0 1 1 180,0 a90,90 0 1 1 -180,0 M58,262 a61,61 0 1 1 121,0 a61,61 0 1 1 -121,0 M108,268 a72,72 0 1 1 143,0 a72,72 0 1 1 -143,0 M156,249 a102,102 0 1 1 204,0 a102,102 0 1 1 -204,0 M308,255 a68,68 0 1 1 135,0 a68,68 0 1 1 -135,0 M374,259 a86,86 0 1 1 172,0 a86,86 0 1 1 -172,0 M497,259 a63,63 0 1 1 126,0 a63,63 0 1 1 -126,0 M557,233 a75,75 0 1 1 150,0 a75,75 0 1 1 -150,0 M642,258 a84,84 0 1 1 167,0 a84,84 0 1 1 -167,0 M735,265 a96,96 0 1 1 191,0 a96,96 0 1 1 -191,0 M832,248 a100,100 0 1 1 200,0 a100,100 0 1 1 -200,0 M955,236 a104,104 0 1 1 208,0 a104,104 0 1 1 -208,0 M1088,267 a71,71 0 1 1 142,0 a71,71 0 1 1 -142,0 M1143,243 a91,91 0 1 1 183,0 a91,91 0 1 1 -183,0" fill="none" stroke="#070b12" stroke-width="10"/>
+          <path d="M-60,-10 L1260,-10 L1260,250 L-60,250 Z M-112,252 a72,72 0 1 1 144,0 a72,72 0 1 1 -144,0 M-55,255 a90,90 0 1 1 180,0 a90,90 0 1 1 -180,0 M58,262 a61,61 0 1 1 121,0 a61,61 0 1 1 -121,0 M108,268 a72,72 0 1 1 143,0 a72,72 0 1 1 -143,0 M156,249 a102,102 0 1 1 204,0 a102,102 0 1 1 -204,0 M308,255 a68,68 0 1 1 135,0 a68,68 0 1 1 -135,0 M374,259 a86,86 0 1 1 172,0 a86,86 0 1 1 -172,0 M497,259 a63,63 0 1 1 126,0 a63,63 0 1 1 -126,0 M557,233 a75,75 0 1 1 150,0 a75,75 0 1 1 -150,0 M642,258 a84,84 0 1 1 167,0 a84,84 0 1 1 -167,0 M735,265 a96,96 0 1 1 191,0 a96,96 0 1 1 -191,0 M832,248 a100,100 0 1 1 200,0 a100,100 0 1 1 -200,0 M955,236 a104,104 0 1 1 208,0 a104,104 0 1 1 -208,0 M1088,267 a71,71 0 1 1 142,0 a71,71 0 1 1 -142,0 M1143,243 a91,91 0 1 1 183,0 a91,91 0 1 1 -183,0" fill="#111a2a"/>
+          <path class="cloud-rim" d="M-98,291 A72,72 0 0 0 18,291 M-37,304 A90,90 0 0 0 108,304 M70,296 A61,61 0 0 0 167,296 M122,307 A72,72 0 0 0 237,307 M176,305 A102,102 0 0 0 339,305 M321,292 A68,68 0 0 0 430,292 M391,306 A86,86 0 0 0 529,306 M510,294 A63,63 0 0 0 611,294 M572,274 A75,75 0 0 0 692,274 M659,304 A84,84 0 0 0 793,304 M754,318 A96,96 0 0 0 907,318 M852,303 A100,100 0 0 0 1012,303 M976,293 A104,104 0 0 0 1142,293 M1102,306 A71,71 0 0 0 1215,306 M1161,293 A91,91 0 0 0 1308,293" fill="none" stroke="#1c2940" stroke-width="5" opacity=".7" stroke-linecap="round"/>
         </svg>
-
-        <span class="caldera-glow"></span>
-        <span class="plume plume-1"></span>
-        <span class="plume plume-2"></span>
-        <span class="plume plume-3"></span>
+      </div>
+      <div class="clouds clouds-front" aria-hidden="true">
+        <svg viewBox="0 0 1200 320" preserveAspectRatio="xMidYMin slice" xmlns="http://www.w3.org/2000/svg">
+          <path d="M-60,-10 L1260,-10 L1260,160 L-60,160 Z M-103,162 a63,63 0 1 1 126,0 a63,63 0 1 1 -126,0 M-24,160 a64,64 0 1 1 127,0 a64,64 0 1 1 -127,0 M60,160 a52,52 0 1 1 105,0 a52,52 0 1 1 -105,0 M96,145 a77,77 0 1 1 153,0 a77,77 0 1 1 -153,0 M202,171 a49,49 0 1 1 97,0 a49,49 0 1 1 -97,0 M262,177 a47,47 0 1 1 93,0 a47,47 0 1 1 -93,0 M297,164 a71,71 0 1 1 142,0 a71,71 0 1 1 -142,0 M391,161 a46,46 0 1 1 91,0 a46,46 0 1 1 -91,0 M426,151 a53,53 0 1 1 105,0 a53,53 0 1 1 -105,0 M463,158 a64,64 0 1 1 127,0 a64,64 0 1 1 -127,0 M540,165 a66,66 0 1 1 132,0 a66,66 0 1 1 -132,0 M606,158 a71,71 0 1 1 143,0 a71,71 0 1 1 -143,0 M665,178 a85,85 0 1 1 170,0 a85,85 0 1 1 -170,0 M782,153 a73,73 0 1 1 147,0 a73,73 0 1 1 -147,0 M871,145 a57,57 0 1 1 113,0 a57,57 0 1 1 -113,0 M935,172 a61,61 0 1 1 122,0 a61,61 0 1 1 -122,0 M977,173 a83,83 0 1 1 167,0 a83,83 0 1 1 -167,0 M1082,175 a53,53 0 1 1 107,0 a53,53 0 1 1 -107,0 M1109,156 a84,84 0 1 1 168,0 a84,84 0 1 1 -168,0" fill="none" stroke="#070b12" stroke-width="10"/>
+          <path d="M-60,-10 L1260,-10 L1260,160 L-60,160 Z M-103,162 a63,63 0 1 1 126,0 a63,63 0 1 1 -126,0 M-24,160 a64,64 0 1 1 127,0 a64,64 0 1 1 -127,0 M60,160 a52,52 0 1 1 105,0 a52,52 0 1 1 -105,0 M96,145 a77,77 0 1 1 153,0 a77,77 0 1 1 -153,0 M202,171 a49,49 0 1 1 97,0 a49,49 0 1 1 -97,0 M262,177 a47,47 0 1 1 93,0 a47,47 0 1 1 -93,0 M297,164 a71,71 0 1 1 142,0 a71,71 0 1 1 -142,0 M391,161 a46,46 0 1 1 91,0 a46,46 0 1 1 -91,0 M426,151 a53,53 0 1 1 105,0 a53,53 0 1 1 -105,0 M463,158 a64,64 0 1 1 127,0 a64,64 0 1 1 -127,0 M540,165 a66,66 0 1 1 132,0 a66,66 0 1 1 -132,0 M606,158 a71,71 0 1 1 143,0 a71,71 0 1 1 -143,0 M665,178 a85,85 0 1 1 170,0 a85,85 0 1 1 -170,0 M782,153 a73,73 0 1 1 147,0 a73,73 0 1 1 -147,0 M871,145 a57,57 0 1 1 113,0 a57,57 0 1 1 -113,0 M935,172 a61,61 0 1 1 122,0 a61,61 0 1 1 -122,0 M977,173 a83,83 0 1 1 167,0 a83,83 0 1 1 -167,0 M1082,175 a53,53 0 1 1 107,0 a53,53 0 1 1 -107,0 M1109,156 a84,84 0 1 1 168,0 a84,84 0 1 1 -168,0" fill="#1a2438"/>
+          <path class="cloud-rim" d="M-90,197 A63,63 0 0 0 10,197 M-11,195 A64,64 0 0 0 91,195 M70,189 A52,52 0 0 0 154,189 M111,188 A77,77 0 0 0 234,188 M212,198 A49,49 0 0 0 290,198 M271,203 A47,47 0 0 0 346,203 M311,203 A71,71 0 0 0 425,203 M400,186 A46,46 0 0 0 473,186 M437,180 A53,53 0 0 0 521,180 M476,193 A64,64 0 0 0 578,193 M553,201 A66,66 0 0 0 658,201 M621,198 A71,71 0 0 0 735,198 M682,225 A85,85 0 0 0 818,225 M796,194 A73,73 0 0 0 914,194 M883,176 A57,57 0 0 0 973,176 M947,206 A61,61 0 0 0 1045,206 M994,218 A83,83 0 0 0 1127,218 M1093,204 A53,53 0 0 0 1178,204 M1126,203 A84,84 0 0 0 1261,203" fill="none" stroke="#3b4e70" stroke-width="5" opacity=".55" stroke-linecap="round"/>
+        </svg>
       </div>
 
-      <div class="mist-band" aria-hidden="true"></div>
-      <div class="ridge ridge-near" aria-hidden="true"></div>
+      <img class="scene" [src]="sceneUrl" (error)="onSceneError()" alt="" aria-hidden="true" draggable="false" />
 
-      <!-- Weather & particles -->
-      <div class="rain" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <div class="ash" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-      </div>
-      <div class="embers" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span>
-      </div>
+      <div class="fog fog-a" aria-hidden="true"></div>
+      <div class="fog fog-b" aria-hidden="true"></div>
+      <div class="rain rain-far" aria-hidden="true"></div>
+      <div class="storm-flash" aria-hidden="true"></div>
+      <div class="rain rain-near" aria-hidden="true"></div>
 
-      <!-- ══ Foreground: logo + start button ══ -->
+      <div class="vignette" aria-hidden="true"></div>
+
+      <!-- ══ Foreground: logo, tagline, start ══ -->
       <div class="welcome-content">
-        <div class="logo-wrap">
-          <span class="logo-halo" aria-hidden="true"></span>
-          <img class="welcome-logo"
-               src="/lahar-defense/assets/laharaya_logo.png"
-               alt="LAHARAYA" />
-          <!-- Specular sweep. The wrapper is masked to the logo's own shape,
-               and the bar inside it slides across on a transform, so the
-               highlight travels over the artwork itself rather than its
-               bounding box. -->
-          <span class="logo-shine" aria-hidden="true"><span class="shine-bar"></span></span>
+        <div class="brand">
+          <div class="logo-wrap">
+            <span class="logo-halo" aria-hidden="true"></span>
+            <img class="welcome-logo" src="/lahar-defense/assets/laharaya_logo.png" alt="LAHARAYA" draggable="false" />
+          </div>
+          <p class="tagline"><span class="tagline-face">Get Saved or Get Buried!</span></p>
         </div>
 
-        <!-- Tagline. Styled to sit with the logo rather than as plain body
-             copy: carved stone face, warm gradient, and the same amber glow
-             the logo and start button carry. -->
-        <p class="tagline">
-          <span class="tagline-text" data-text="Get Saved or Get Buried!">Get Saved or Get Buried!</span>
-        </p>
-
-        <button (click)="startGame()" class="start-btn" aria-label="Tap to Begin Simulation">
-          <span class="btn-ambient-glow" aria-hidden="true"></span>
-          <span class="btn-ripple-halo" aria-hidden="true"></span>
-          <span class="btn-inner-content">
-            <span class="btn-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="34" height="34">
-                <path d="M8 5v14l11-7z"/>
+        <div class="cta">
+          <button (click)="startGame()" class="start-btn" aria-label="Tap to begin">
+            <span class="start-ring" aria-hidden="true"></span>
+            <!-- Pointing hand: a nudge for visitors standing at the kiosk
+                 wondering what to do. Fades in after a few seconds. -->
+            <svg class="tap-hint" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 13.4V5.2a1.7 1.7 0 0 1 3.4 0v6" fill="#f0bd86" stroke="#3a2913" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+              <path d="M12.4 11.2V9.6a1.6 1.6 0 0 1 3.2 0v2.2m0 0v-1a1.6 1.6 0 0 1 3.2 0V16a5.4 5.4 0 0 1-5.4 5.4h-1.8a5.4 5.4 0 0 1-4.3-2.2l-2.8-3.8a1.7 1.7 0 0 1 2.6-2.2L9 15.2"
+                    fill="#f0bd86" stroke="#3a2913" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+            <span class="start-face">
+              <svg class="start-play" viewBox="0 0 22 26" aria-hidden="true">
+                <path d="M4 3.2 19 13 4 22.8z" fill="#fff" stroke="#3a2913" stroke-width="3" stroke-linejoin="round"/>
               </svg>
+              <span class="start-text">Tap to Begin</span>
             </span>
-            <span class="btn-text">TAP TO BEGIN</span>
-            <span class="btn-arrow">→</span>
-          </span>
-        </button>
+          </button>
+          <p class="cta-note">Defend a Pampanga town from Mt. Pinatubo's lahar</p>
+        </div>
       </div>
     </div>
 
-    <!-- Embedded Game Simulation Frame -->
+    <!-- Embedded game -->
     <iframe *ngIf="gameStarted" class="game-frame w-full h-full border-0 block" [src]="gameUrl"></iframe>
   </div>
 </div>

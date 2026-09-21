@@ -6,20 +6,10 @@
     </div>
 </div>
 
-<!-- Background Music -->
-<audio 
-  #bgMusic 
-  autoplay 
-  loop 
-  muted 
->
-  <source src="/assets/audio/bgmusic.mp3" type="audio/mpeg">
-</audio>
-
 <!-- Music Toggle Button -->
 <button
   (click)="toggleMusic()"
-  class="fixed bottom-21 left-10 z-50 cursor-pointer focus:outline-none bg-transparent border-none pointer-events-auto"
+  class="fixed bottom-20 left-12 z-50 cursor-pointer focus:outline-none bg-transparent border-none pointer-events-auto"
   [attr.aria-label]="isMusicPlaying ? 'Mute music' : 'Play music'"
 >
   <i

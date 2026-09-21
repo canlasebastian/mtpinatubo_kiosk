@@ -78,7 +78,7 @@ export class VideoPage {
       id: 4,
       name: 'BISHOP BOBET',
       avatar: '/assets/images/bishop.jpg',
-      videoSrc: '/assets/videos/Bishop_Bobet.mp4',
+      videoSrc: '/assets/videos/Bishop_Bobet_enhanced.mp4',
       storyTitle: 'Bishop of Tarlac',
       category: 'DURING'
     },
@@ -86,7 +86,7 @@ export class VideoPage {
       id: 5,
       name: 'CECILE YUMUL',
       avatar: '/assets/images/cecile.jpg',
-      videoSrc: '/assets/videos/Cecile_Yumul_During.mp4',
+      videoSrc: '/assets/videos/Cecile_Yumul_During_enhanced.mp4',
       storyTitle: 'Broadcast Journalist',
       category: 'DURING'
     },
@@ -94,7 +94,7 @@ export class VideoPage {
       id: 6,
       name: 'LEVY LAUS',
       avatar: '/assets/images/levy.jpg',
-      videoSrc: '/assets/videos/Levi_Laus_During.mp4',
+      videoSrc: '/assets/videos/Levi_Laus_During_enhanced.mp4',
       storyTitle: 'Founder of Laus Group of Companies',
       category: 'DURING'
     },
@@ -102,7 +102,7 @@ export class VideoPage {
       id: 7,
       name: 'AMONG ED',
       avatar: '/assets/images/among.jpg',
-      videoSrc: '/assets/videos/Among_Ed_Before.mp4',
+      videoSrc: '/assets/videos/Among_Ed_Before_enhanced.mp4',
       storyTitle: 'Former Catholic Priest',
       category: 'BEFORE'
     },
@@ -110,7 +110,7 @@ export class VideoPage {
       id: 8,
       name: 'LILIA PINEDA',
       avatar: '/assets/images/pineda.jpg',
-      videoSrc: '/assets/videos/Gov_Pineda.mp4',
+      videoSrc: '/assets/videos/Gov_Pineda_enhanced.mp4',
       storyTitle: 'Vice Governor of Pampanga',
       category: 'AFTER'
     },
@@ -118,7 +118,7 @@ export class VideoPage {
       id: 9,
       name: 'ABONG TAYAG',
       avatar: '/assets/images/tayag.jpg',
-      videoSrc: '/assets/videos/Abong_Tayag_During.mp4',
+      videoSrc: '/assets/videos/Abong_Tayag_During_enhanced.mp4',
       storyTitle: 'Leader of MACCII',
       category: 'DURING'
     },
@@ -126,7 +126,7 @@ export class VideoPage {
       id: 10,
       name: 'OCA RODRIGUEZ',
       avatar: '/assets/images/oca.jpg',
-      videoSrc: '/assets/videos/Oca_Rodriguez_During.mp4',
+      videoSrc: '/assets/videos/Oca_Rodriguez_During_enhanced.mp4',
       storyTitle: 'Former Mayor of San Fernando',
       category: 'DURING'
     },
@@ -134,7 +134,7 @@ export class VideoPage {
       id: 11,
       name: 'GUY HILBERO',
       avatar: '/assets/images/guy.png',
-      videoSrc: '/assets/videos/Guy_Hilbero_Before.mp4',
+      videoSrc: '/assets/videos/Guy_Hilbero_Before_enhanced.mp4',
       storyTitle: 'Tourism Officer',
       category: 'BEFORE'
     },
@@ -142,7 +142,7 @@ export class VideoPage {
       id: 12,
       name: 'Gregg Westrick',
       avatar: '/assets/images/american.png',
-      videoSrc: '/assets/videos/american_before.mp4',
+      videoSrc: '/assets/videos/american_before.webm',
       storyTitle: '1991 Earthquake Survivor',
       category: 'BEFORE'
     },

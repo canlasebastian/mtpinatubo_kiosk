@@ -1,6 +1,7 @@
 import { Component, ElementRef, ViewChild, AfterViewInit, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { AudioService } from '../services/audio.service'; // adjust path to match your project
 
 @Component({
   selector: 'app-welcome-page',
@@ -11,15 +12,14 @@ import { Router } from '@angular/router';
 })
 export class WelcomePage implements AfterViewInit, OnInit {
   @ViewChild('bgVideo') videoRef!: ElementRef<HTMLVideoElement>;
-  @ViewChild('bgMusic') bgMusic!: ElementRef<HTMLAudioElement>;
 
   isColored = false;
-  isMusicPlaying = true;
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private audioService: AudioService) {}
 
   ngOnInit(): void {
-    // Audio will autoplay and loop
+    // Music is started on first user click (toggleColor), not here,
+    // so the browser's autoplay policy doesn't block it.
   }
 
   ngAfterViewInit(): void {
@@ -28,16 +28,18 @@ export class WelcomePage implements AfterViewInit, OnInit {
     }
   }
 
+  get isMusicPlaying(): boolean {
+    return this.audioService.isPlaying;
+  }
+
   toggleMusic(): void {
-    if (this.bgMusic && this.bgMusic.nativeElement) {
-      this.bgMusic.nativeElement.muted = !this.bgMusic.nativeElement.muted;
-      this.isMusicPlaying = !this.bgMusic.nativeElement.muted;
-    }
+    this.audioService.toggleMute();
   }
 
   toggleColor(): void {
     if (this.isColored) return;
     this.isColored = true;
+    this.audioService.play(); // first user gesture — safe to unmute/play here
     setTimeout(() => {
       this.router.navigate(['/menu']);
     }, 3000);

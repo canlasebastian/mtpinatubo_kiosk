@@ -3645,3 +3645,1118 @@ svg.ui-ico.rank-3 circle:last-of-type { fill: #c07b45; }
 .lb-rank svg.ui-ico { width: 30px; height: 30px; vertical-align: -0.3em; }
 #lbBanner svg.ui-ico { width: 1.1em; height: 1.1em; vertical-align: -0.18em; margin-right: 4px; }
 #endTitle svg.ui-ico { width: 1.05em; height: 1.05em; vertical-align: -0.16em; margin-right: 4px; }
+
+
+/* ---- Slider touch targets ----
+   The two volume sliders were 21px tall — under the 44px minimum for a
+   finger, and the only controls in the game that were. On a kiosk that
+   means visitors stab at them and miss. The INPUT is now 44px so the whole
+   band is grabbable; the visible track stays thin, so nothing looks
+   chunkier than before. */
+#musicSlider, #sfxSlider {
+  height: 44px !important;
+  background: transparent !important;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+#musicSlider::-webkit-slider-runnable-track,
+#sfxSlider::-webkit-slider-runnable-track {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f2861d 0%, #f2861d var(--fill, 70%),
+              rgba(60,45,22,0.45) var(--fill, 70%), rgba(60,45,22,0.45) 100%);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.35);
+}
+#musicSlider::-moz-range-track, #sfxSlider::-moz-range-track {
+  height: 12px; border-radius: 999px; background: rgba(60,45,22,0.45);
+}
+#musicSlider::-webkit-slider-thumb, #sfxSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  margin-top: -7px;                      /* centre on the 12px track */
+  background: linear-gradient(180deg, #ffd75f, #f2861d);
+  border: 3px solid #fffdf6;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+#musicSlider::-moz-range-thumb, #sfxSlider::-moz-range-thumb {
+  width: 26px; height: 26px; border-radius: 50%; border: 3px solid #fffdf6;
+  background: linear-gradient(180deg, #ffd75f, #f2861d);
+}
+
+
+/* The 44px sliders added ~46px to the card and pushed it off the stage.
+   The rows no longer need their own vertical padding — the input supplies
+   the height now — so it comes back out of the padding, not the type. */
+#soundSettings { padding: calc(6 * var(--u)) calc(10 * var(--u)) !important; gap: 0 !important; }
+#soundSettings .ss-row { padding: 0 !important; margin: 0 !important; gap: calc(8 * var(--u)); }
+#soundSettings .ss-chip { width: 26px !important; height: 26px !important; }
+
+
+/* Last 16px at the 540x960 target: taken from the brief's internal spacing
+   rather than the type, so nothing gets harder to read at kiosk distance. */
+#objectiveCard .mission-brief { padding: calc(10 * var(--u)) calc(12 * var(--u)) !important; }
+#objectiveCard .mo-steps li { margin-bottom: calc(3 * var(--u)) !important; }
+#objectiveCard .mo-tip { padding: calc(7 * var(--u)) calc(10 * var(--u)) !important; margin-top: calc(6 * var(--u)) !important; }
+
+
+/* =====================================================================
+   HUD v3 — OUTLINED GAME KIT  (play screen only)
+   ---------------------------------------------------------------------
+   The final say on every panel, button and tool tile shown during play.
+   The older layers above still exist, but anything visible on the play
+   screen is settled here, so this is the one block to edit.
+
+   Look: the same dark ink outline the volcano and town are drawn with,
+   a flat parchment face, and a hard drop edge under everything that
+   can be pressed — instead of the glossy plastic bands used before.
+   So the HUD reads as part of the 2D art rather than stickers on it.
+
+   Colour carries role:
+     parchment + ink  read-only information   (budget, village)
+     amber            the one action to take   (Start, the Tools tab,
+                                               the armed tool)
+     storm blue       running / quiet nav      (storm status, Menu)
+     red              only when something is being lost or can't be paid
+
+   Labels are small ink chips in sentence case; the numbers that matter
+   (money, homes standing, seconds left) are set in the display face so
+   they can be read from a step back at the kiosk.
+   ===================================================================== */
+:root {
+  --hud-ink:      #3a2913;
+  --hud-ink-soft: #6b5230;
+  --hud-face:     #fdf4de;
+  --hud-face-lo:  #f0ddb3;
+  --hud-well:     #e4cf9f;
+  --hud-amber:    #ffb838;
+  --hud-amber-hi: #ffd978;
+  --hud-amber-lo: #ee861b;
+  --hud-green:    #33a852;
+  --hud-green-lo: #1c7a39;
+  --hud-red:      #de4430;
+  --hud-red-lo:   #a82718;
+  --hud-storm:    #3d5c84;
+  --hud-storm-lo: #22385a;
+  --hud-storm-ink:#142238;
+}
+/* Sizes are in --u, which is defined on #gameWrap, so these tokens must
+   live there too — declared on :root they would resolve to nothing. */
+#gameWrap {
+  --hud-line: calc(3.5 * var(--u));
+  --hud-drop: calc(6 * var(--u));
+  --hud-shadow: 0 calc(12 * var(--u)) calc(18 * var(--u)) rgba(10, 8, 4, 0.32);
+  --hud-inner: inset 0 0 0 calc(2.5 * var(--u)) rgba(255, 255, 255, 0.72);
+  /* Letters outlined in ink, for white labels on coloured buttons */
+  --hud-letter-ink:
+    calc(-1.6 * var(--u)) 0 0 var(--hud-ink), calc(1.6 * var(--u)) 0 0 var(--hud-ink),
+    0 calc(-1.6 * var(--u)) 0 var(--hud-ink), 0 calc(1.6 * var(--u)) 0 var(--hud-ink),
+    calc(-1.2 * var(--u)) calc(-1.2 * var(--u)) 0 var(--hud-ink),
+    calc(1.2 * var(--u)) calc(-1.2 * var(--u)) 0 var(--hud-ink),
+    calc(-1.2 * var(--u)) calc(1.2 * var(--u)) 0 var(--hud-ink),
+    calc(1.2 * var(--u)) calc(1.2 * var(--u)) 0 var(--hud-ink),
+    0 calc(3.6 * var(--u)) 0 var(--hud-ink);
+}
+
+/* ---------------------------------------------------------------------
+   Info panels: Budget and Protect Village
+   --------------------------------------------------------------------- */
+#budgetPanel, #goalPanel {
+  background: linear-gradient(180deg, var(--hud-face) 0%, var(--hud-face) 58%, var(--hud-face-lo) 100%) !important;
+  border: var(--hud-line) solid var(--hud-ink) !important;
+  border-radius: calc(16 * var(--u)) !important;
+  box-shadow: 0 var(--hud-drop) 0 var(--hud-ink), var(--hud-shadow), var(--hud-inner) !important;
+  padding: calc(9 * var(--u)) calc(14 * var(--u)) calc(12 * var(--u)) !important;
+  display: flex !important; flex-direction: column !important;
+  align-items: center !important; justify-content: space-between !important;
+  gap: calc(4 * var(--u));
+  color: var(--hud-ink) !important;
+}
+#budgetPanel::after, #goalPanel::after { content: none !important; display: none !important; }
+#budgetPanel::before { content: none !important; display: none !important; }
+/* goalPanel::before is the red wash for the loss alarm — keep it, but as
+   a plain full-panel overlay that is invisible until the alarm runs. */
+#goalPanel::before {
+  content: '' !important; display: block !important;
+  position: absolute; inset: 0 !important;
+  width: auto !important; height: auto !important;
+  border-radius: inherit; background: transparent !important;
+  pointer-events: none;
+}
+#goalPanel.alarm::before { background: none; }
+
+/* Label chip */
+#gameWrap #budgetPanel .label, #gameWrap #goalPanel .label {
+  opacity: 1 !important;
+  display: inline-flex !important; align-items: center; gap: calc(5 * var(--u));
+  background: var(--hud-ink) !important;
+  color: var(--hud-face) !important;
+  font-family: var(--font-body) !important;
+  font-weight: 800 !important;
+  font-size: calc(15 * var(--u)) !important;
+  line-height: 1 !important;
+  letter-spacing: calc(0.3 * var(--u)) !important;
+  text-transform: none !important;
+  padding: calc(5 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u)) !important;
+  border-radius: 999px;
+  margin: 0 !important;
+  text-shadow: none !important;
+  white-space: nowrap;
+}
+/* Peso coin before "Budget", shield before the village label */
+#budgetPanel .label::before, #goalPanel .label::before {
+  content: '' !important;
+  width: calc(14 * var(--u)); height: calc(14 * var(--u));
+  flex: 0 0 auto;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  font-size: 0 !important;
+}
+#budgetPanel .label::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='8.6' fill='%23ffc94d' stroke='%23fdf4de' stroke-width='1.6'/%3E%3Cpath d='M7.6 14.6V5.6h3.1a2.6 2.6 0 0 1 0 5.2H7.6M5.6 7.4h8.8M5.6 9.2h8.8' fill='none' stroke='%233a2913' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+#goalPanel .label::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1.6 17 4.4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9v-5z' fill='%23fdf4de'/%3E%3Cpath d='m6.6 10 2.4 2.4 4.6-5' fill='none' stroke='%233a2913' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+/* The village chip changes colour with the town's health */
+#gameWrap #goalPanel.safe    .label { background: var(--hud-green-lo) !important; }
+#gameWrap #goalPanel.caution .label { background: #b86a0c !important; }
+#gameWrap #goalPanel.danger  .label { background: var(--hud-red-lo) !important; }
+#goalPanel.danger { border-color: var(--hud-red-lo) !important; }
+
+/* Big numbers */
+#budgetPanel .amount, #budgetAmount {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(40 * var(--u)) !important;
+  line-height: 1 !important;
+  letter-spacing: calc(1 * var(--u)) !important;
+  color: var(--hud-green-lo) !important;
+  text-shadow: 0 calc(2.5 * var(--u)) 0 #ffffff !important;
+  padding-top: calc(4 * var(--u));
+}
+#budgetPanel .amount.low, #budgetAmount.low {
+  color: var(--hud-red) !important;
+  animation: hudLowMoney 1.1s ease-in-out infinite;
+}
+@keyframes hudLowMoney { 50% { transform: scale(1.06); } }
+
+.goal-counter, #goalCounter {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(30 * var(--u)) !important;
+  line-height: 1 !important;
+  color: var(--hud-ink) !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 #ffffff !important;
+  letter-spacing: calc(0.6 * var(--u));
+  margin: calc(2 * var(--u)) 0 0 !important;
+}
+.goal-counter .gc-sub {
+  font-family: var(--font-body) !important;
+  font-weight: 800 !important;
+  font-size: calc(14 * var(--u)) !important;
+  color: var(--hud-ink-soft) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+  letter-spacing: 0;
+}
+.goal-counter.warning, #goalCounter.warning { color: var(--hud-red) !important; }
+
+/* Gauges: an ink-rimmed recessed track with a lit fill */
+#budgetBar, .village-bar {
+  width: 100% !important;
+  height: calc(17 * var(--u)) !important;
+  border: calc(2.5 * var(--u)) solid var(--hud-ink) !important;
+  border-radius: 999px !important;
+  background: var(--hud-well) !important;
+  box-shadow: inset 0 calc(3 * var(--u)) 0 rgba(58, 41, 19, 0.22) !important;
+  overflow: hidden !important;
+  position: relative;
+  margin: 0 !important;
+  flex: 0 0 auto;
+}
+#budgetBarFill, .village-bar-fill {
+  height: 100% !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #6ad986 0%, var(--hud-green) 55%, var(--hud-green-lo) 100%) !important;
+  box-shadow: inset 0 calc(3 * var(--u)) 0 rgba(255, 255, 255, 0.45),
+              calc(2 * var(--u)) 0 0 var(--hud-ink) !important;
+}
+#budgetBar.low #budgetBarFill, .village-bar-fill.danger {
+  background: linear-gradient(180deg, #ff8a74 0%, var(--hud-red) 55%, var(--hud-red-lo) 100%) !important;
+}
+.village-bar-fill.caution {
+  background: linear-gradient(180deg, var(--hud-amber-hi) 0%, var(--hud-amber) 55%, var(--hud-amber-lo) 100%) !important;
+}
+/* One notch per home, drawn as faint ink ticks over the fill */
+.village-bar-ticks { position: absolute !important; inset: 0 !important; display: flex !important; }
+.village-bar-ticks span {
+  flex: 1 1 0;
+  border-right: calc(1.2 * var(--u)) solid rgba(58, 41, 19, 0.28) !important;
+}
+.village-bar-ticks span:last-child { border-right: 0 !important; }
+
+#houseDots {
+  width: 100%;
+  display: flex !important; flex-direction: column !important;
+  align-items: center; gap: calc(5 * var(--u)) !important;
+  margin: 0 !important;
+}
+.lm-row { display: flex !important; justify-content: center; gap: calc(5 * var(--u)) !important; }
+
+/* Landmark markers: identity colour, ink rim */
+.landmark-dot, .school-dot, .house-dot {
+  border: calc(2 * var(--u)) solid var(--hud-ink) !important;
+  box-shadow: 0 calc(2 * var(--u)) 0 rgba(58, 41, 19, 0.45),
+              inset 0 calc(2 * var(--u)) 0 rgba(255, 255, 255, 0.45) !important;
+}
+.landmark-dot.lost, .school-dot.lost, .house-dot.lost {
+  background: var(--hud-red) !important;
+  border-color: var(--hud-red-lo) !important;
+}
+
+/* ---------------------------------------------------------------------
+   START — the one loud control on the screen
+   --------------------------------------------------------------------- */
+#rainPanel {
+  border-radius: calc(18 * var(--u)) !important;
+  transition: transform .1s ease, box-shadow .1s ease, filter .15s ease, background .25s ease;
+}
+#rainPanel:not(.active) {
+  background: linear-gradient(180deg, var(--hud-amber-hi) 0%, var(--hud-amber) 50%, var(--hud-amber-lo) 100%) !important;
+  border: var(--hud-line) solid var(--hud-ink) !important;
+  box-shadow:
+    0 var(--hud-drop) 0 var(--hud-ink),
+    var(--hud-shadow),
+    inset 0 0 0 calc(2.5 * var(--u)) rgba(255, 244, 208, 0.85),
+    inset 0 calc(-7 * var(--u)) 0 rgba(176, 78, 8, 0.35) !important;
+  animation: hudStartBreathe 2.2s ease-in-out infinite !important;
+  transform: none;
+}
+#rainPanel:not(.active)::before, #rainPanel:not(.active)::after { content: none !important; display: none !important; }
+@keyframes hudStartBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(calc(-2 * var(--u))) scale(1.03); }
+}
+#rainPanel:not(.active) #rainStatus {
+  display: inline-flex; align-items: center; gap: calc(10 * var(--u));
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(34 * var(--u)) !important;
+  letter-spacing: calc(1.4 * var(--u)) !important;
+  color: #ffffff !important;
+  text-transform: uppercase;
+  line-height: 1 !important;
+  padding-top: calc(3 * var(--u));
+  text-shadow: var(--hud-letter-ink) !important;
+}
+/* Play triangle drawn in the same white-with-ink-rim as the letters */
+#rainPanel:not(.active) #rainStatus::before {
+  content: '';
+  width: calc(22 * var(--u)); height: calc(26 * var(--u));
+  margin-top: calc(-3 * var(--u));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 26'%3E%3Cpath d='M4 3.2 19 13 4 22.8z' fill='%23fff' stroke='%233a2913' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  filter: drop-shadow(0 calc(3 * var(--u)) 0 var(--hud-ink));
+}
+#rainPanel:not(.active):hover { filter: brightness(1.05); }
+#rainPanel:not(.active):active {
+  animation: none !important;
+  transform: translateY(calc(5 * var(--u))) !important;
+  box-shadow:
+    0 calc(1 * var(--u)) 0 var(--hud-ink),
+    0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.3),
+    inset 0 0 0 calc(2.5 * var(--u)) rgba(255, 244, 208, 0.85) !important;
+}
+
+/* Running storm: a status read-out, not a button */
+#rainPanel.active {
+  background: linear-gradient(180deg, #54779f 0%, var(--hud-storm) 50%, var(--hud-storm-lo) 100%) !important;
+  border: var(--hud-line) solid var(--hud-storm-ink) !important;
+  box-shadow:
+    0 var(--hud-drop) 0 var(--hud-storm-ink),
+    var(--hud-shadow),
+    inset 0 0 0 calc(2.5 * var(--u)) rgba(170, 205, 240, 0.35) !important;
+  color: #eef5fd !important;
+  justify-content: flex-start !important;
+  gap: calc(10 * var(--u)) !important;
+  padding: 0 calc(14 * var(--u)) !important;
+  animation: none !important;
+  cursor: default;
+}
+#rainPanel.active::before { content: none !important; display: none !important; }
+/* Live light in the corner, so it reads as "running" at a glance */
+#rainPanel.active::after {
+  content: '' !important; display: block !important;
+  position: absolute; top: calc(10 * var(--u)) !important; right: calc(12 * var(--u)) !important;
+  left: auto !important; bottom: auto !important;
+  width: calc(11 * var(--u)) !important; height: calc(11 * var(--u)) !important;
+  border-radius: 50%;
+  background: #ff6b52 !important;
+  border: calc(2 * var(--u)) solid var(--hud-storm-ink);
+  box-shadow: 0 0 0 0 rgba(255, 107, 82, 0.6) !important;
+  animation: hudLive 1.4s ease-out infinite;
+}
+@keyframes hudLive {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 107, 82, 0.65); }
+  100% { box-shadow: 0 0 0 calc(9 * var(--u)) rgba(255, 107, 82, 0); }
+}
+#rainPanel.active #rainIcon {
+  display: block !important;
+  width: calc(50 * var(--u)) !important; height: calc(50 * var(--u)) !important;
+  flex: 0 0 auto;
+  padding: calc(4 * var(--u));
+  border-radius: 50%;
+  background: rgba(10, 22, 40, 0.45) !important;
+  border: calc(2 * var(--u)) solid rgba(170, 205, 240, 0.35);
+  box-sizing: border-box;
+}
+#rainPanel.active #rainStatus {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(22 * var(--u)) !important;
+  line-height: 1.05 !important;
+  letter-spacing: calc(0.8 * var(--u)) !important;
+  text-transform: uppercase;
+  text-align: left;
+  color: #eef5fd !important;
+  opacity: 1 !important;
+  text-shadow: 0 calc(2.5 * var(--u)) 0 var(--hud-storm-ink) !important;
+}
+
+/* ---------------------------------------------------------------------
+   MENU — same footprint as Start, but quiet
+   --------------------------------------------------------------------- */
+#instructionsBtn {
+  display: flex !important; align-items: center; justify-content: center;
+  gap: calc(8 * var(--u));
+  background: linear-gradient(180deg, #8da5c2 0%, #6a84a6 50%, #546d8f 100%) !important;
+  border: var(--hud-line) solid var(--hud-storm-ink) !important;
+  border-radius: calc(18 * var(--u)) !important;
+  box-shadow:
+    0 var(--hud-drop) 0 var(--hud-storm-ink),
+    var(--hud-shadow),
+    inset 0 0 0 calc(2.5 * var(--u)) rgba(225, 236, 250, 0.45) !important;
+  color: #ffffff !important;
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(26 * var(--u)) !important;
+  letter-spacing: calc(1.2 * var(--u)) !important;
+  text-transform: uppercase;
+  line-height: 1 !important;
+  padding: calc(3 * var(--u)) 0 0 !important;
+  text-shadow:
+    calc(-1.4 * var(--u)) 0 0 var(--hud-storm-ink), calc(1.4 * var(--u)) 0 0 var(--hud-storm-ink),
+    0 calc(-1.4 * var(--u)) 0 var(--hud-storm-ink), 0 calc(1.4 * var(--u)) 0 var(--hud-storm-ink),
+    0 calc(3.2 * var(--u)) 0 var(--hud-storm-ink) !important;
+  opacity: 1 !important;
+}
+#instructionsBtn svg.ui-ico {
+  width: calc(26 * var(--u)); height: calc(26 * var(--u));
+  margin-top: calc(-3 * var(--u));
+  filter: drop-shadow(0 calc(2.5 * var(--u)) 0 var(--hud-storm-ink));
+}
+#instructionsBtn:hover { filter: brightness(1.06); transform: none !important; }
+#instructionsBtn:active {
+  transform: translateY(calc(5 * var(--u))) !important;
+  box-shadow:
+    0 calc(1 * var(--u)) 0 var(--hud-storm-ink),
+    0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.3),
+    inset 0 0 0 calc(2.5 * var(--u)) rgba(225, 236, 250, 0.45) !important;
+}
+
+/* ---------------------------------------------------------------------
+   Toolbox
+   --------------------------------------------------------------------- */
+#toolbox {
+  width: calc(186 * var(--u)) !important;
+  background: linear-gradient(180deg, var(--hud-face) 0%, var(--hud-face-lo) 100%) !important;
+  border: var(--hud-line) solid var(--hud-ink) !important;
+  border-right: none !important;
+  border-radius: calc(18 * var(--u)) 0 0 calc(18 * var(--u)) !important;
+  box-shadow:
+    0 var(--hud-drop) 0 var(--hud-ink),
+    calc(-6 * var(--u)) calc(10 * var(--u)) calc(18 * var(--u)) rgba(10, 8, 4, 0.35),
+    inset calc(2.5 * var(--u)) calc(2.5 * var(--u)) 0 rgba(255, 255, 255, 0.72) !important;
+  padding: calc(10 * var(--u)) calc(9 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u)) !important;
+}
+#toolbox::after { content: none !important; }
+#toolItemsContainer { display: flex !important; flex-direction: column !important; gap: calc(9 * var(--u)) !important; }
+
+.tool-item {
+  background: linear-gradient(180deg, #fffbf1 0%, #f7e9c9 100%) !important;
+  border: calc(2.5 * var(--u)) solid var(--hud-ink) !important;
+  border-radius: calc(13 * var(--u)) !important;
+  box-shadow: 0 calc(4 * var(--u)) 0 var(--hud-ink),
+              inset 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.8) !important;
+  padding: calc(6 * var(--u)) calc(8 * var(--u)) !important;
+  gap: calc(8 * var(--u)) !important;
+  margin-bottom: calc(3 * var(--u));
+  filter: none !important;
+  opacity: 1 !important;
+  transform: none;
+}
+.tool-item:hover:not(.disabled) { transform: translateY(calc(-2 * var(--u))) !important; }
+.tool-item:active:not(.disabled) {
+  transform: translateY(calc(3 * var(--u))) !important;
+  box-shadow: 0 calc(1 * var(--u)) 0 var(--hud-ink),
+              inset 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.8) !important;
+}
+.tool-icon {
+  width: calc(46 * var(--u)) !important; height: calc(46 * var(--u)) !important;
+  padding: calc(4 * var(--u)) !important;
+  background: radial-gradient(circle at 50% 38%, #fffdf6 0%, var(--hud-well) 100%) !important;
+  border: calc(2 * var(--u)) solid rgba(58, 41, 19, 0.35);
+  box-shadow: inset 0 calc(-3 * var(--u)) 0 rgba(58, 41, 19, 0.12) !important;
+  box-sizing: border-box;
+}
+.tool-text { gap: calc(3 * var(--u)) !important; }
+.tool-name {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(19 * var(--u)) !important;
+  letter-spacing: calc(0.6 * var(--u)) !important;
+  line-height: 1 !important;
+  color: var(--hud-ink) !important;
+  padding-top: calc(2 * var(--u));
+}
+.tool-price {
+  font-family: var(--font-body) !important;
+  font-weight: 900 !important;
+  font-size: calc(15 * var(--u)) !important;
+  line-height: 1.1 !important;
+  color: #ffffff !important;
+  background: var(--hud-green-lo) !important;
+  border-radius: 999px !important;
+  padding: calc(2 * var(--u)) calc(8 * var(--u)) !important;
+  box-shadow: none !important;
+}
+
+/* Armed: this tool goes down on the next tap on the map */
+.tool-item.armed {
+  background: linear-gradient(180deg, var(--hud-amber-hi) 0%, var(--hud-amber) 100%) !important;
+  border-color: var(--hud-ink) !important;
+  box-shadow:
+    0 calc(4 * var(--u)) 0 var(--hud-ink),
+    0 0 0 calc(3.5 * var(--u)) #ffffff,
+    0 0 0 calc(6.5 * var(--u)) var(--hud-amber-lo),
+    inset 0 0 0 calc(2 * var(--u)) rgba(255, 248, 220, 0.8) !important;
+  transform: translateX(calc(-6 * var(--u))) !important;
+}
+.tool-item.armed .tool-icon { background: radial-gradient(circle at 50% 38%, #fffdf6 0%, #ffe3a0 100%) !important; }
+.tool-item.armed::before {
+  content: '' !important;
+  position: absolute; left: calc(-13 * var(--u)) !important; top: 50%;
+  width: calc(12 * var(--u)) !important; height: calc(12 * var(--u)) !important;
+  transform: translateY(-50%) rotate(45deg);
+  background: var(--hud-amber-lo) !important;
+  border: calc(2 * var(--u)) solid var(--hud-ink);
+  border-radius: calc(2 * var(--u)) !important;
+}
+
+/* Two different "can't use it" states, so the player knows WHY:
+   locked = the storm hasn't started; poor = not enough budget. */
+.tool-item.locked { filter: saturate(0.25) !important; opacity: 0.78 !important; cursor: not-allowed; }
+.tool-item.locked .tool-price { background: var(--hud-ink-soft) !important; }
+.tool-item.locked::after {
+  content: '' !important; display: block !important;
+  position: absolute; top: calc(-6 * var(--u)); right: calc(-4 * var(--u));
+  width: calc(22 * var(--u)); height: calc(22 * var(--u));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='10' fill='%233a2913'/%3E%3Cpath d='M7.8 10V8.2a3.2 3.2 0 0 1 6.4 0V10' fill='none' stroke='%23fdf4de' stroke-width='1.9'/%3E%3Crect x='6.4' y='9.8' width='9.2' height='6.8' rx='1.6' fill='%23fdf4de'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.tool-item.poor { opacity: 0.85 !important; cursor: not-allowed; }
+.tool-item.poor .tool-icon { filter: grayscale(0.7); }
+.tool-item.poor .tool-name { color: var(--hud-ink-soft) !important; }
+.tool-item.poor .tool-price { background: var(--hud-red) !important; }
+
+/* Tools tab */
+#toolboxToggle {
+  background: linear-gradient(180deg, var(--hud-amber-hi) 0%, var(--hud-amber) 50%, var(--hud-amber-lo) 100%) !important;
+  border: var(--hud-line) solid var(--hud-ink) !important;
+  border-right: none !important;
+  border-radius: calc(18 * var(--u)) 0 0 calc(18 * var(--u)) !important;
+  box-shadow:
+    0 var(--hud-drop) 0 var(--hud-ink),
+    calc(-5 * var(--u)) calc(8 * var(--u)) calc(14 * var(--u)) rgba(10, 8, 4, 0.35),
+    inset calc(2.5 * var(--u)) calc(2.5 * var(--u)) 0 rgba(255, 244, 208, 0.85) !important;
+}
+#toolboxToggle::after { content: none !important; display: none !important; }
+#toolboxToggle .tb-chevron {
+  border-left-color: var(--hud-ink) !important;
+  border-bottom-color: var(--hud-ink) !important;
+  filter: none !important;
+}
+#toolboxToggle .tb-label {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  font-size: calc(21 * var(--u)) !important;
+  letter-spacing: calc(2 * var(--u)) !important;
+  color: #ffffff !important;
+  text-shadow:
+    calc(-1.4 * var(--u)) 0 0 var(--hud-ink), calc(1.4 * var(--u)) 0 0 var(--hud-ink),
+    0 calc(-1.4 * var(--u)) 0 var(--hud-ink), 0 calc(1.4 * var(--u)) 0 var(--hud-ink),
+    calc(-2.6 * var(--u)) 0 0 var(--hud-ink) !important;
+}
+
+/* Hand the focus ring the same ink/amber pair so keyboard use still shows */
+#rainPanel:focus-visible, #instructionsBtn:focus-visible,
+#toolboxToggle:focus-visible, .tool-item:focus-visible {
+  outline: calc(4 * var(--u)) solid #ffffff !important;
+  outline-offset: calc(3 * var(--u)) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #rainPanel:not(.active), #rainPanel.active::after,
+  #budgetAmount.low { animation: none !important; }
+}
+/* Village panel carries four rows (chip, count, landmarks, homes bar) in
+   the same height as the budget panel, so its rhythm is a notch tighter. */
+#gameWrap #goalPanel { padding-top: calc(8 * var(--u)) !important; padding-bottom: calc(11 * var(--u)) !important; gap: calc(3 * var(--u)) !important; }
+#gameWrap #goalPanel .label { padding-top: calc(4 * var(--u)) !important; padding-bottom: calc(5 * var(--u)) !important; }
+#gameWrap #goalCounter { font-size: calc(27 * var(--u)) !important; margin: 0 !important; }
+#gameWrap #houseDots { gap: calc(4 * var(--u)) !important; }
+#gameWrap #goalPanel .village-bar { height: calc(15 * var(--u)) !important; }
+#rainPanel:not(.active) #rainStatus::before { width: calc(26 * var(--u)); height: calc(30 * var(--u)); }
+#gameWrap #goalPanel { padding-bottom: calc(9 * var(--u)) !important; }
+
+
+/* =====================================================================
+   MENU SCREENS v2 — OUTLINED GAME KIT
+   ---------------------------------------------------------------------
+   Mission Objective, Who Is Defending, Choose Municipality, Town
+   Profile, Leaderboard and the end screen, brought into the same look as
+   the play screen (see "HUD v3" above): parchment faces, one dark ink
+   outline, a hard ink drop edge under anything pressable, and colour that
+   means the same thing everywhere —
+     amber  = the next step        green = start playing
+     slate  = go back              red   = leave the game
+     cream  = secondary (Leaderboard, filters, Select)
+   The older card styles above still exist; this block is the final say
+   for these screens and the one to edit.
+   ===================================================================== */
+#overlay {
+  --mk-ink: #3a2913;
+  --mk-ink-soft: #6b5230;
+  --mk-face: #fdf4de;
+  --mk-face-lo: #f2e2bc;
+  --mk-paper: #fffaf0;
+  --mk-amber: #ffb838; --mk-amber-hi: #ffd978; --mk-amber-lo: #ee861b;
+  --mk-green: #33a852; --mk-green-hi: #6ad986; --mk-green-lo: #1c7a39;
+  --mk-slate: #6a84a6; --mk-slate-hi: #8da5c2; --mk-slate-lo: #546d8f;
+  --mk-red: #de4430; --mk-red-hi: #ff8a74; --mk-red-lo: #a82718;
+  /* The live volcano scene shows through, dimmed, instead of a flat brown
+     sheet — the menu now sits on the game's own world. */
+  background:
+    radial-gradient(120% 70% at 50% 110%, rgba(20,14,8,0.75) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(28,20,12,0.55) 0%, rgba(28,20,12,0.72) 100%) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* ---- Card ---- */
+#overlay .screen-card {
+  background: linear-gradient(180deg, var(--mk-face) 0%, var(--mk-face) 60%, var(--mk-face-lo) 100%) !important;
+  border: 4px solid var(--mk-ink) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 8px 0 var(--mk-ink),
+    0 22px 40px rgba(0,0,0,0.5),
+    inset 0 0 0 3px rgba(255,255,255,0.7) !important;
+  color: var(--mk-ink) !important;
+}
+#overlay .screen-card::before, #overlay .screen-card::after { display: none !important; }   /* no tape */
+
+/* ---- Title plaque: ink-outlined, sits across the top edge ---- */
+#overlay .screen-card h1 {
+  background: linear-gradient(180deg, #b0703f 0%, #8a532a 55%, #6e4020 100%) !important;
+  border: 4px solid var(--mk-ink) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 6px 0 var(--mk-ink), 0 12px 18px rgba(0,0,0,0.35),
+              inset 0 0 0 2px rgba(255,220,170,0.35) !important;
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 1px !important;
+  color: #fff6e2 !important;
+  -webkit-text-fill-color: #fff6e2 !important;
+  text-shadow:
+    -1.6px 0 0 var(--mk-ink), 1.6px 0 0 var(--mk-ink), 0 -1.6px 0 var(--mk-ink), 0 1.6px 0 var(--mk-ink),
+    0 3.4px 0 var(--mk-ink) !important;
+  padding: 10px 30px 8px !important;
+  display: flex !important; align-items: center; gap: 8px;
+  clip-path: none !important;
+}
+#overlay .screen-card h1 svg.ui-ico {
+  width: 1.15em !important; height: 1.15em !important;
+  filter: drop-shadow(0 2px 0 var(--mk-ink));
+  flex: 0 0 auto;
+}
+#overlay .screen-card h1 svg.ui-ico path, #overlay .screen-card h1 svg.ui-ico circle { -webkit-text-fill-color: initial; }
+
+/* ---- Body type ---- */
+#overlay .screen-card p,
+#overlay .screen-card li,
+#overlay .screen-card .town-history { color: var(--mk-ink) !important; }
+
+/* ---- Inner panels: paper with a thin ink rim (no dashed borders) ---- */
+#overlay .edu-content-box,
+#overlay .tg-card,
+#overlay .town-objective .obj-chip,
+#overlay #soundSettings,
+#overlay #earnedTitles,
+#overlay #endRankBlock {
+  background: var(--mk-paper) !important;
+  border: 2.5px solid var(--mk-ink) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 3px 0 rgba(58,41,19,0.35) !important;
+}
+#overlay .mission-brief .mo-tip {
+  background: #fff1cc !important;
+  border: 2px solid var(--mk-ink) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  color: var(--mk-ink) !important;
+  font-weight: 700;
+}
+#overlay .town-objective .obj-chip.danger {
+  background: #ffe3dc !important;
+  border-color: var(--mk-red-lo) !important;
+}
+#overlay .town-objective .obj-num {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.5px;
+  color: var(--mk-ink) !important;
+}
+#overlay .town-objective .obj-chip.danger .obj-num { color: var(--mk-red-lo) !important; }
+
+/* ---- Mission objective ---- */
+#overlay .mission-brief .mo-goal b { color: var(--mk-amber-lo) !important; }
+#overlay .mission-brief .mo-num {
+  background: linear-gradient(180deg, var(--mk-amber-hi), var(--mk-amber-lo)) !important;
+  border: 2.5px solid var(--mk-ink) !important;
+  color: #fff !important;
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  text-shadow: 0 1.6px 0 var(--mk-ink), 0 0 1px var(--mk-ink) !important;
+  box-shadow: 0 2px 0 var(--mk-ink) !important;
+}
+
+/* ---- Buttons: one shape, colour by role ---- */
+#overlay button,
+#overlay .select-town-btn,
+#overlay .lb-filter {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase;
+  border: 3.5px solid var(--mk-ink) !important;
+  border-radius: 16px !important;
+  color: #fff !important;
+  text-shadow:
+    -1.4px 0 0 var(--mk-ink), 1.4px 0 0 var(--mk-ink), 0 -1.4px 0 var(--mk-ink), 0 1.4px 0 var(--mk-ink),
+    0 3px 0 var(--mk-ink) !important;
+  box-shadow: 0 5px 0 var(--mk-ink), 0 10px 16px rgba(0,0,0,0.25),
+              inset 0 0 0 2.5px rgba(255,255,255,0.35) !important;
+  transform: none;
+  transition: transform .08s ease, box-shadow .08s ease, filter .15s ease !important;
+}
+#overlay button:hover, #overlay .select-town-btn:hover, #overlay .lb-filter:hover { filter: brightness(1.05); transform: none !important; }
+#overlay button:active, #overlay .select-town-btn:active, #overlay .lb-filter:active {
+  transform: translateY(4px) !important;
+  box-shadow: 0 1px 0 var(--mk-ink), 0 3px 6px rgba(0,0,0,0.25),
+              inset 0 0 0 2.5px rgba(255,255,255,0.35) !important;
+}
+#overlay button.btn-primary {
+  background: linear-gradient(180deg, var(--mk-amber-hi) 0%, var(--mk-amber) 50%, var(--mk-amber-lo) 100%) !important;
+}
+#overlay button.btn-success {
+  background: linear-gradient(180deg, var(--mk-green-hi) 0%, var(--mk-green) 50%, var(--mk-green-lo) 100%) !important;
+}
+#overlay button.btn-secondary {
+  background: linear-gradient(180deg, var(--mk-slate-hi) 0%, var(--mk-slate) 50%, var(--mk-slate-lo) 100%) !important;
+}
+#overlay button#exitToKioskBtn, #overlay button#restartBtn {
+  background: linear-gradient(180deg, var(--mk-red-hi) 0%, var(--mk-red) 50%, var(--mk-red-lo) 100%) !important;
+}
+/* Secondary cream buttons: ink lettering, no outline on the letters */
+#overlay button.btn-trophy,
+#overlay .select-town-btn,
+#overlay .lb-filter {
+  background: linear-gradient(180deg, #fffaf0 0%, #f2e2bc 100%) !important;
+  color: var(--mk-ink) !important;
+  text-shadow: 0 2px 0 #fff !important;
+}
+#overlay button.btn-trophy svg.ui-ico { filter: none; }
+#overlay .btn-arrow { text-shadow: inherit; }
+#overlay button:disabled, #overlay button[disabled] {
+  filter: saturate(0.2) brightness(0.95) !important;
+  opacity: 0.7 !important;
+}
+
+/* ---- Who is defending ---- */
+#overlay #playerNameInput {
+  background: #fff !important;
+  border: 3.5px solid var(--mk-ink) !important;
+  border-radius: 16px !important;
+  box-shadow: inset 0 4px 0 rgba(58,41,19,0.12), 0 4px 0 var(--mk-ink) !important;
+  color: var(--mk-ink) !important;
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 1px;
+  text-align: center;
+}
+#overlay #playerNameInput:focus {
+  outline: none !important;
+  box-shadow: inset 0 4px 0 rgba(58,41,19,0.12), 0 4px 0 var(--mk-ink), 0 0 0 5px var(--mk-amber) !important;
+}
+#overlay #playerNameInput::placeholder { font-family: var(--font-body); color: rgba(58,41,19,0.4) !important; }
+#overlay #nameHint { color: var(--mk-ink-soft) !important; font-weight: 700; opacity: 1 !important; }
+
+/* ---- Choose municipality ---- */
+#overlay #townCard .town-card {
+  background: var(--mk-paper) !important;
+  border: 3px solid var(--mk-ink) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 0 var(--mk-ink) !important;
+  transform: none !important;
+  transition: box-shadow .15s ease, transform .15s ease !important;
+}
+#overlay #townCard .town-card.selected {
+  box-shadow: 0 4px 0 var(--mk-ink), 0 0 0 4px #fff, 0 0 0 8px var(--mk-amber) !important;
+}
+#overlay #townCard .town-info h3 {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 1px;
+  color: var(--mk-ink) !important;
+}
+#overlay .town-diff {
+  border: 2px solid var(--mk-ink) !important;
+  border-radius: 999px !important;
+  font-family: var(--font-body) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 0 var(--mk-ink) !important;
+}
+#overlay .town-diff.hard { background: var(--mk-red) !important; color: #fff !important; }
+#overlay .town-diff.mid  { background: var(--mk-amber) !important; color: var(--mk-ink) !important; }
+#overlay .town-diff.easy { background: var(--mk-green) !important; color: #fff !important; }
+#overlay .town-hazard {
+  background: transparent !important;
+  color: var(--mk-ink) !important;
+  font-weight: 800 !important;
+}
+#overlay .town-hazard .th-ico { width: 1.35em; height: 1.35em; flex: 0 0 auto; }
+#overlay .select-town-btn { border-radius: 12px !important; }
+#overlay #townCard .town-card.selected .select-town-btn {
+  background: linear-gradient(180deg, var(--mk-green-hi) 0%, var(--mk-green) 50%, var(--mk-green-lo) 100%) !important;
+  color: #fff !important;
+  text-shadow:
+    -1.2px 0 0 var(--mk-ink), 1.2px 0 0 var(--mk-ink), 0 -1.2px 0 var(--mk-ink), 0 1.2px 0 var(--mk-ink),
+    0 2.6px 0 var(--mk-ink) !important;
+}
+
+/* ---- Town profile ---- */
+#overlay .tool-guide-head {
+  font-family: var(--font-body) !important;
+  font-weight: 900 !important;
+  color: var(--mk-ink) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  opacity: 1 !important;
+}
+#overlay .tg-name {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.6px;
+  color: var(--mk-ink) !important;
+}
+#overlay .tg-price {
+  background: var(--mk-green-lo) !important;
+  color: #fff !important;
+  border-radius: 999px !important;
+  font-family: var(--font-body) !important;
+  font-weight: 900 !important;
+  padding: 1px 8px !important;
+}
+#overlay img.tg-icon { width: 44px !important; height: 44px !important; object-fit: contain; }
+
+/* ---- Leaderboard ---- */
+#overlay .lb-filter { border-radius: 999px !important; }
+#overlay .lb-filter.active {
+  background: var(--mk-ink) !important;
+  color: var(--mk-face) !important;
+  text-shadow: none !important;
+  box-shadow: 0 5px 0 #1f160a !important;
+}
+#overlay .lb-row {
+  background: var(--mk-paper) !important;
+  border: 2.5px solid var(--mk-ink) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 3px 0 rgba(58,41,19,0.35) !important;
+  color: var(--mk-ink) !important;
+}
+#overlay .lb-top1 { background: #fff1cc !important; }
+#overlay .lb-name, #overlay .lb-score { color: var(--mk-ink) !important; }
+#overlay .lb-score { font-family: var(--font-display) !important; font-weight: 400 !important; }
+#overlay #lbEmpty { color: var(--mk-ink-soft) !important; font-weight: 800; }
+
+/* ---- End screen ---- */
+#overlay .grade-badge {
+  border: 4px solid var(--mk-ink) !important;
+  box-shadow: 0 5px 0 var(--mk-ink), inset 0 0 0 3px rgba(255,255,255,0.45) !important;
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  text-shadow: 0 2px 0 var(--mk-ink) !important;
+}
+#overlay #endScoreValue { font-family: var(--font-display) !important; font-weight: 400 !important; color: var(--mk-ink) !important; }
+#overlay #endScoreLabel, #overlay #endGradeLabel { color: var(--mk-ink-soft) !important; opacity: 1 !important; font-weight: 800; }
+#overlay #endRankBanner { font-family: var(--font-display) !important; font-weight: 400 !important; color: var(--mk-amber-lo) !important; text-shadow: 0 2px 0 var(--mk-ink) !important; }
+#overlay #earnedTitles .et-head { color: var(--mk-ink-soft) !important; opacity: 1 !important; text-transform: none !important; letter-spacing: 0 !important; font-size: 15px; }
+
+/* ---- Sound settings sliders: ink track + amber thumb ---- */
+#overlay #musicSlider::-webkit-slider-thumb, #overlay #sfxSlider::-webkit-slider-thumb {
+  border: 3px solid var(--mk-ink) !important;
+  box-shadow: 0 2px 0 var(--mk-ink) !important;
+}
+#overlay #musicSlider::-webkit-slider-runnable-track, #overlay #sfxSlider::-webkit-slider-runnable-track {
+  border: 2px solid var(--mk-ink);
+}
+#overlay .ss-chip { background: var(--mk-ink) !important; border: none !important; }
+#overlay .ss-label { color: var(--mk-ink) !important; font-weight: 900 !important; }
+#overlay .ss-value { color: var(--mk-ink) !important; font-weight: 900 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  #overlay button, #overlay .town-card { transition: none !important; }
+}
+
+/* While a menu screen is up, the play-screen HUD behind it is hidden:
+   with the scene now visible through the backdrop, a second set of
+   Budget / Start / Menu controls peeking out behind the card was
+   confusing. (#hudLayer is the canvas storm gauge.) */
+#gameWrap:has(#overlay:not(.hidden)) .hud-panel,
+#gameWrap:has(#overlay:not(.hidden)) #instructionsBtn,
+#gameWrap:has(#overlay:not(.hidden)) #toolbox,
+#gameWrap:has(#overlay:not(.hidden)) #hudLayer { visibility: hidden !important; }
+
+/* Town profile: a little tighter so Back / Start Game always fit. */
+#overlay #infoCard .tg-card { padding: 7px 9px !important; }
+#overlay #infoCard .tool-guide { gap: 7px !important; margin-bottom: 7px !important; }
+#overlay #infoCard .tool-guide-notes { gap: 6px !important; }
+#overlay #infoCard #infoCardText { font-size: 22px !important; line-height: 1.3 !important; margin-bottom: 8px !important; }
+#overlay #infoCard .tg-line { font-size: 17px !important; line-height: 1.25 !important; }
+#overlay #infoCard .tg-name { font-size: 20px !important; }
+/* Choose municipality: the intro was set larger than the cards it
+   introduces. The cards carry the decision, so they get the size. */
+#overlay #townCard > p.town-intro, #overlay #townCard > p { font-size: 20px !important; line-height: 1.35 !important; margin-bottom: 12px !important; }
+#overlay #townCard .town-info h3 { font-size: 26px !important; }
+#overlay #townCard .town-info p { font-size: 17px !important; line-height: 1.3 !important; margin: 2px 0 6px !important; }
+#overlay #townCard .town-hazard { font-size: 15px !important; }
+
+/* =====================================================================
+   PROTECT VILLAGE — landmark badges
+   Each landmark is a small outlined tile with its own picture (church,
+   school, robot, bridge, market...) instead of a coloured diamond or
+   square. The strip along the bottom is that landmark's live health, in
+   the same identity colour as its health bar in the scene, so the badge
+   and the building on the map are visibly the same thing.
+     healthy  parchment tile, full strip
+     hurt     (≤45% health) red rim that pulses — act now
+     lost     faded picture, red strike-through, empty strip
+   ===================================================================== */
+#gameWrap .lm-row {
+  display: flex !important;
+  justify-content: center;
+  gap: calc(4 * var(--u)) !important;
+  flex-wrap: nowrap;
+}
+.lm-badge {
+  --hp: 1;
+  position: relative;
+  width: calc(30 * var(--u)); height: calc(27 * var(--u));
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  border: calc(2.2 * var(--u)) solid var(--hud-ink, #3a2913);
+  border-radius: calc(8 * var(--u));
+  background: linear-gradient(180deg, #fffdf6 0%, #f3e6c6 100%);
+  box-shadow: 0 calc(2 * var(--u)) 0 var(--hud-ink, #3a2913);
+  overflow: hidden;
+  transition: background .3s ease;
+}
+.lm-badge .lm-ico {
+  position: absolute;
+  left: 50%; top: calc(0.6 * var(--u));
+  width: calc(19 * var(--u)); height: calc(19 * var(--u));
+  transform: translateX(-50%);
+  display: block;
+}
+/* live health strip */
+.lm-badge .lm-hp {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(3.8 * var(--u));
+  background: rgba(58, 41, 19, 0.2);
+  border-top: calc(1.2 * var(--u)) solid var(--hud-ink, #3a2913);
+}
+.lm-badge .lm-hp::after {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc(var(--hp) * 100%);
+  background: var(--lm-color, #33a852);
+  transition: width .35s ease;
+}
+/* badly damaged: red rim pulses so the player looks for it on the map */
+.lm-badge.hurt {
+  animation: lmHurt 0.9s ease-in-out infinite;
+}
+.lm-badge.hurt .lm-hp::after { background: #de4430; }
+@keyframes lmHurt {
+  0%, 100% { box-shadow: 0 calc(2.4 * var(--u)) 0 var(--hud-ink, #3a2913), 0 0 0 0 rgba(222, 68, 48, 0); }
+  50%      { box-shadow: 0 calc(2.4 * var(--u)) 0 var(--hud-ink, #3a2913), 0 0 0 calc(3 * var(--u)) rgba(222, 68, 48, 0.75); }
+}
+/* lost: faded, struck through in red */
+.lm-badge.lost {
+  background: linear-gradient(180deg, #f3ddd6 0%, #e6c8bf 100%);
+}
+.lm-badge.lost .lm-ico { filter: grayscale(1); opacity: 0.45; }
+.lm-badge.lost::after {
+  content: '';
+  position: absolute; left: 50%; top: 50%;
+  width: 130%; height: calc(4 * var(--u));
+  background: #de4430;
+  border: calc(1.2 * var(--u)) solid var(--hud-ink, #3a2913);
+  border-radius: 999px;
+  transform: translate(-50%, -60%) rotate(-45deg);
+}
+/* the moment it falls */
+.lm-badge.just-lost { animation: lmFall .6s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes lmFall {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.35) rotate(-6deg); }
+  60%  { transform: scale(.92) rotate(4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-badge.hurt, .lm-badge.just-lost { animation: none; }
+}
+/* the badge row is taller than the old dots: take the space back from the
+   gap between it and the homes bar so the panel keeps its size */
+#gameWrap #goalPanel #houseDots { gap: calc(2.5 * var(--u)) !important; }
+#gameWrap #goalPanel .lm-badge { height: calc(26 * var(--u)); }
+
+/* =====================================================================
+   NOTIFICATIONS — stacked, colour-coded notices
+   ---------------------------------------------------------------------
+   #toast is now a container; each notice is a .tn inside it (see
+   showToast in script.js). Same outlined kit as the HUD: parchment
+   face, ink rim, hard ink drop. The coloured icon block on the left says
+   what KIND of news it is before a word is read; the thin bar along the
+   bottom runs down with the time the notice has left.
+   Position is unchanged: the band below the HUD panels, over sky and
+   volcano, where nothing can be built or tapped.
+   ===================================================================== */
+#gameWrap #toast {
+  position: absolute !important;
+  top: 21% !important; left: 50% !important; bottom: auto !important;
+  transform: translateX(-50%) !important;
+  width: 88% !important; max-width: 88% !important;
+  display: flex !important; flex-direction: column !important; align-items: center !important;
+  gap: calc(7 * var(--u)) !important;
+  background: none !important; border: none !important; box-shadow: none !important;
+  padding: 0 !important; margin: 0 !important;
+  opacity: 1 !important; visibility: visible !important;
+  pointer-events: none !important;
+  z-index: 45 !important;
+  min-height: 0 !important; height: auto !important;
+}
+#gameWrap #toast::before, #gameWrap #toast::after { display: none !important; }
+
+.tn {
+  --tn-c: #6b5230; --tn-face: #fdf4de;
+  position: relative;
+  display: flex; align-items: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--tn-face) 0%, var(--tn-face) 60%, #f3e3bd 100%);
+  border: calc(3 * var(--u)) solid #3a2913;
+  border-radius: calc(14 * var(--u));
+  box-shadow: 0 calc(4.5 * var(--u)) 0 #3a2913, 0 calc(10 * var(--u)) calc(18 * var(--u)) rgba(10, 8, 4, 0.35);
+  overflow: hidden;
+  color: #3a2913;
+  font-family: var(--font-body, 'Nunito', sans-serif);
+  font-weight: 800;
+  font-size: calc(21 * var(--u));
+  line-height: 1.25;
+  text-align: left;
+  animation: tnIn .34s cubic-bezier(.2, 1.4, .4, 1) both;
+}
+.tn-ico {
+  align-self: stretch;
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: calc(44 * var(--u));
+  background: var(--tn-c);
+  border-right: calc(2.5 * var(--u)) solid #3a2913;
+}
+.tn-ico svg, .tn-ico img {
+  width: calc(28 * var(--u)) !important; height: calc(28 * var(--u)) !important;
+  padding: 0 !important; margin: 0 !important;
+  background: none !important; border: none !important; box-shadow: none !important;
+  filter: drop-shadow(0 calc(1.5 * var(--u)) 0 rgba(58, 41, 19, 0.45));
+}
+.tn-ico img { background: #fffaf0 !important; border-radius: 50% !important; }
+.tn-msg { padding: calc(9 * var(--u)) calc(14 * var(--u)) calc(11 * var(--u)); }
+.tn-msg b { font-weight: 900; }
+.tn-count:empty { display: none; }
+.tn-count {
+  flex: 0 0 auto;
+  margin-right: calc(10 * var(--u));
+  padding: calc(2 * var(--u)) calc(8 * var(--u));
+  border-radius: 999px;
+  background: #3a2913; color: #fdf4de;
+  font-family: var(--font-body, 'Nunito', sans-serif);   /* has the × glyph; Luckiest Guy does not */
+  font-weight: 900;
+  font-size: calc(17 * var(--u));
+  letter-spacing: calc(0.5 * var(--u));
+}
+.tn-time {
+  position: absolute; left: 0; bottom: 0;
+  height: calc(3.5 * var(--u)); width: 100%;
+  background: var(--tn-c);
+  opacity: 0.7;
+  transform-origin: left center;
+}
+@keyframes tnTime { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* Kinds */
+.tn-loss  { --tn-c: #de4430; --tn-face: #fff1ec; }
+.tn-money { --tn-c: #33a852; --tn-face: #f1fbe9; }
+.tn-warn  { --tn-c: #ffb838; --tn-face: #fff7e0; }
+.tn-good  { --tn-c: #1c7a39; --tn-face: #eefaf0; }
+.tn-storm { --tn-c: #3d5c84; --tn-face: #eef3fa; }
+.tn-info  { --tn-c: #e6d3a8; --tn-face: #fdf4de; }
+.tn-loss .tn-msg, .tn-warn .tn-msg { font-weight: 900; }
+.tn-money .tn-msg b { color: #1c7a39; font-size: 1.15em; }
+
+/* Motion */
+@keyframes tnIn {
+  0%   { opacity: 0; transform: translateY(calc(-14 * var(--u))) scale(.9); }
+  100% { opacity: 1; transform: none; }
+}
+.tn-loss { animation: tnIn .34s cubic-bezier(.2, 1.4, .4, 1) both, tnShake .42s ease-in-out .3s; }
+@keyframes tnShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(calc(-6 * var(--u))); }
+  40% { transform: translateX(calc(5 * var(--u))); }
+  60% { transform: translateX(calc(-3 * var(--u))); }
+  80% { transform: translateX(calc(2 * var(--u))); }
+}
+.tn.bump { animation: tnBump .3s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes tnBump { 40% { transform: scale(1.07); } 100% { transform: none; } }
+.tn.out { animation: tnOut .26s ease-in forwards; }
+@keyframes tnOut { to { opacity: 0; transform: translateY(calc(-10 * var(--u))) scale(.94); } }
+@media (prefers-reduced-motion: reduce) {
+  .tn, .tn-loss, .tn.bump, .tn.out { animation: none !important; }
+  .tn.out { opacity: 0; }
+}
+/* Never cover the toolbox: while it is open, the notice stack moves into
+   the space to its left. (Same :has() support as the menu HUD-hiding.) */
+#gameWrap #toast { width: 84% !important; max-width: 84% !important; transition: left .25s ease, width .25s ease; }
+#gameWrap:has(#toolbox:not(.collapsed)) #toast { left: 39% !important; width: 72% !important; max-width: 72% !important; }

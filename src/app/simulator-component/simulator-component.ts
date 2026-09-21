@@ -176,7 +176,7 @@ export class SimulatorComponent implements AfterViewInit, OnDestroy {
     'escalating-unrest': { position: [16, 17, 40], target: [0, 11, 0] },
     // Pulled back and raised: the plume now builds a tall, wide umbrella and the old
     // framing cropped its top off.
-    'eruption': { position: [0, 17, 51], target: [0, 20, 0] },
+        'eruption': { position: [0, 34, 95], target: [0, 45, 0] },
     // Widest view of all — in the aftermath the changed landscape is the subject, not the vent.
     'aftermath': { position: [0, 27, 70], target: [0, 5, 0] },
   };
@@ -912,7 +912,7 @@ export class SimulatorComponent implements AfterViewInit, OnDestroy {
     // so distance haze blends into the skybox rather than fading to black.
     this.scene.fog = new THREE.FogExp2(0x8a5a48, 0.0075);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 500);
+        this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 700); 
     this.camera.position.set(0, 9, 26);
     this.camera.lookAt(0, 6, 0);
 
@@ -977,7 +977,7 @@ export class SimulatorComponent implements AfterViewInit, OnDestroy {
     this.controls.minDistance = 12;
     // Wide enough for the aftermath's regional framing (~54 units) without letting the
     // viewer pull back so far that the volcano stops being the subject.
-    this.controls.maxDistance = 110;
+        this.controls.maxDistance = 160;
     this.controls.minPolarAngle = 0.15;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
     this.controls.update();
@@ -1694,80 +1694,69 @@ varying float vLavaGlow;
    *  convective cloud: it rises at its own speed, swells as it entrains air, drifts with the
    *  wind, and eventually dies — at which point its particles detach and disperse. Overlapping
    *  cells read as billows merging; dying cells read as billows tearing apart. */
-  private maybeSpawnEddy(dt: number): void {
-    // Only while the vent is actually driving a column. Precursor puffs in earlier chapters
-    // deliberately get no cells, so they disperse as small detached wisps instead.
-    if (this.phase !== 'pressure' && this.phase !== 'burst' && this.phase !== 'overflow') return;
-    this.eddyTimer -= dt;
-    if (this.eddyTimer > 0) return;
-    this.eddyTimer = 0.12 + Math.random() * 0.22;
-    if (this.plumeEddies.length > 26) return;
+ private maybeSpawnEddy(dt: number): void {
+  if (this.phase !== 'pressure' && this.phase !== 'burst' && this.phase !== 'overflow') return;
+  this.eddyTimer -= dt;
+  if (this.eddyTimer > 0) return;
+  this.eddyTimer = 0.05 + Math.random() * 0.09;
+  if (this.plumeEddies.length > 90) return;
 
-    const ventY = this.lavaMesh.position.y;
-    const a = Math.random() * Math.PI * 2;
-    // Cells are born slightly off-axis and asymmetrically, never on a neat ring.
-    const r = Math.pow(Math.random(), 1.6) * 1.5;
+  const ventY = this.lavaMesh.position.y;
+  const a = Math.random() * Math.PI * 2;
+  const r = Math.pow(Math.random(), 1.6) * 4.5;
 
-    this.plumeEddies.push({
-      pos: new THREE.Vector3(Math.cos(a) * r, ventY + 0.5 + Math.random() * 2.5, Math.sin(a) * r),
-      vel: new THREE.Vector3((Math.random() - 0.5) * 2.4, 6 + Math.random() * 9, (Math.random() - 0.5) * 2.4),
-      radius: 0.5 + Math.random() * 0.6,
-      // Wide spread of final sizes, so billows are visibly different scales rather than uniform.
-      targetRadius: 1.8 + Math.pow(Math.random(), 0.7) * 5.5,
-      life: 1,
-      spin: (Math.random() - 0.5) * 1.5,
-      rise: 0.65 + Math.random() * 0.8,
-    });
-  }
+  this.plumeEddies.push({
+    pos: new THREE.Vector3(Math.cos(a) * r, ventY + 1 + Math.random() * 5, Math.sin(a) * r),
+    vel: new THREE.Vector3((Math.random() - 0.5) * 5, 16 + Math.random() * 22, (Math.random() - 0.5) * 5),
+    radius: 1.5 + Math.random() * 2,
+    targetRadius: 6 + Math.pow(Math.random(), 0.7) * 20,
+    life: 1,
+    spin: (Math.random() - 0.5) * 1.5,
+    rise: 0.9 + Math.random() * 1.1,
+  });
+}
 
   private stepEddies(dt: number, elapsed: number): void {
-    const ventY = this.lavaMesh.position.y;
+  const ventY = this.lavaMesh.position.y;
 
-    // Veering wind: two out-of-phase components so direction wanders rather than holding steady.
-    // Drag below pulls cells toward this speed directly, so it *is* the terminal drift rate.
-    const wStr = 0.6 + this.stormIntensity * 1.3;
-    this.plumeWind.set(
-      Math.sin(elapsed * 0.17 + this.windSeed) * wStr + Math.sin(elapsed * 0.41) * wStr * 0.35,
-      0,
-      Math.cos(elapsed * 0.13 + this.windSeed * 0.7) * wStr * 0.8
-    );
+  const wStr = 0.6 + this.stormIntensity * 1.3;
+  this.plumeWind.set(
+    Math.sin(elapsed * 0.17 + this.windSeed) * wStr + Math.sin(elapsed * 0.41) * wStr * 0.35,
+    0,
+    Math.cos(elapsed * 0.13 + this.windSeed * 0.7) * wStr * 0.8
+  );
 
-    for (let i = this.plumeEddies.length - 1; i >= 0; i--) {
-      const ed = this.plumeEddies[i];
-      const alt = Math.max(0, ed.pos.y - ventY);
+  for (let i = this.plumeEddies.length - 1; i >= 0; i--) {
+    const ed = this.plumeEddies[i];
+    const alt = Math.max(0, ed.pos.y - ventY);
 
-      // Buoyancy falls away with height so cells stall at a ceiling and flatten outward.
-      const buoy = Math.max(0, 1 - alt / 24) * 9 * ed.rise;
-      ed.vel.y += (buoy - 4.2) * dt;
-      ed.vel.y -= ed.vel.y * 0.5 * dt;
+    const buoy = Math.max(0, 1 - alt / 90) * 14 * ed.rise;
+    ed.vel.y += (buoy - 4.2) * dt;
+    ed.vel.y -= ed.vel.y * 0.5 * dt;
 
-      // Wind shear grows with altitude — the top of the plume is dragged much further than the base.
-      ed.vel.x += (this.plumeWind.x * Math.min(1, alt / 13) - ed.vel.x) * 1.1 * dt;
-      ed.vel.z += (this.plumeWind.z * Math.min(1, alt / 13) - ed.vel.z) * 1.1 * dt;
+    ed.vel.x += (this.plumeWind.x * Math.min(1, alt / 45) - ed.vel.x) * 1.1 * dt;
+    ed.vel.z += (this.plumeWind.z * Math.min(1, alt / 45) - ed.vel.z) * 1.1 * dt;
 
-      // Umbrella: once stalled, cells hover and spread laterally rather than continuing to climb.
-      // The outward push is capped by distance and damped, or cells run away to absurd radii.
-      if (alt > 12) {
-        const t = Math.min(1, (alt - 12) / 6);
-        const cur = Math.hypot(ed.pos.x, ed.pos.z) || 0.001;
-        if (cur < 16) {
-          ed.vel.x += (ed.pos.x / cur) * t * 1.3 * dt;
-          ed.vel.z += (ed.pos.z / cur) * t * 1.3 * dt;
-        }
-        ed.vel.y -= ed.vel.y * 2.2 * dt;                          // settle to a hover, don't sink
-        ed.targetRadius = Math.min(8, ed.targetRadius + t * 0.7 * dt);
-        ed.vel.x -= ed.vel.x * 0.9 * dt;
-        ed.vel.z -= ed.vel.z * 0.9 * dt;
+    if (alt > 55) {
+      const t = Math.min(1, (alt - 55) / 25);
+      const cur = Math.hypot(ed.pos.x, ed.pos.z) || 0.001;
+      if (cur < 70) {
+        ed.vel.x += (ed.pos.x / cur) * t * 2.1 * dt;
+        ed.vel.z += (ed.pos.z / cur) * t * 2.1 * dt;
       }
-
-      ed.pos.addScaledVector(ed.vel, dt);
-      // Entrainment: cells swell continuously toward their target size.
-      ed.radius += (ed.targetRadius - ed.radius) * dt * 0.5;
-      ed.life -= dt * 0.125;
-
-      if (ed.life <= 0) this.plumeEddies.splice(i, 1);
+      ed.vel.y -= ed.vel.y * 2.2 * dt;
+      ed.targetRadius = Math.min(30, ed.targetRadius + t * 2.4 * dt);
+      ed.vel.x -= ed.vel.x * 0.9 * dt;
+      ed.vel.z -= ed.vel.z * 0.9 * dt;
     }
+
+    ed.pos.addScaledVector(ed.vel, dt);
+    ed.radius += (ed.targetRadius - ed.radius) * dt * 0.5;
+    ed.life -= dt * 0.06;
+
+    if (ed.life <= 0) this.plumeEddies.splice(i, 1);
   }
+}
 
   // ================= MAGMA BUBBLES (boiling lava surface) =================
 
@@ -3474,9 +3463,9 @@ varying float vLavaGlow;
    *  number of incandescent ballistic bombs thrown clear on steep arcs. Mixing them in one
    *  population is what made the old burst read as a uniform spray. */
   private spawnEjecta(scale: number = 1): void {
-    const baseCount = this.outcome.kind === 'ash' ? 300 : this.outcome.kind === 'steam' ? 130 : 90;
+        const baseCount = this.outcome.kind === 'ash' ? 900 : this.outcome.kind === 'steam' ? 380 : 260;
     const count = Math.max(8, Math.round(baseCount * scale));
-    if (this.ejecta.length > 1700) return; // hard ceiling
+    if (this.ejecta.length > 5000) return; // hard ceiling
 
     // Ash is emitted in clumps rather than evenly, so the column develops lumpy billows
     // instead of a smooth, even sheet of particles.
@@ -3496,7 +3485,7 @@ varying float vLavaGlow;
 
       // Very wide size variance — big slow clots plus fine fast ash is what makes a real
       // column look cauliflowered rather than uniformly grainy.
-      const size = isBomb ? 0.5 + Math.random() * 0.7 : 0.6 + Math.pow(Math.random(), 1.7) * 3.4;
+      const size = isBomb ? 0.6 + Math.random() * 0.9 : 1.1 + Math.pow(Math.random(), 1.7) * 6.5;
 
       const mat = new THREE.MeshStandardMaterial({
         color: isBomb ? 0x3a1206 : 0x2a2521,
@@ -3510,24 +3499,24 @@ varying float vLavaGlow;
       const mesh = new THREE.Mesh(isBomb ? this.ejectaGeoBomb : this.ejectaGeoAsh, mat);
       mesh.scale.setScalar(size);
 
-      // Launch from a tight throat — the column is forced through a vent under pressure.
-      const throat = isBomb ? 0.9 : 0.5;
+            // Launch from a tight throat — the column is forced through a vent under pressure.
+      const throat = isBomb ? 2.2 : 1.6;
       const a = isBomb ? Math.random() * Math.PI * 2 : clumpAngle + (Math.random() - 0.5) * 0.7;
       const rr = (isBomb ? Math.sqrt(Math.random()) : clumpRadius) * throat;
       mesh.position.set(Math.cos(a) * rr, this.ventTopY + 0.3, Math.sin(a) * rr);
       this.ejectaGroup.add(mesh);
 
       let vel: THREE.Vector3;
-      if (isBomb) {
+            if (isBomb) {
         // Steep ballistic arcs that clear the rim and land back on the flanks.
-        const outward = 4 + Math.random() * 7;
-        vel = new THREE.Vector3(Math.cos(a) * outward, 9 + Math.random() * 7, Math.sin(a) * outward);
+        const outward = 6 + Math.random() * 10;
+        vel = new THREE.Vector3(Math.cos(a) * outward, 14 + Math.random() * 10, Math.sin(a) * outward);
       } else {
         // Gas-thrust jet: fast core, slower margins, and heavy clots launched slower than fines.
         const coreness = 1 - rr / throat;
         const massDrag = 1 - (size - 0.6) / 4 * 0.45;
-        const upSpeed = (8 + coreness * 10 + Math.random() * 5) * massDrag;
-        vel = new THREE.Vector3((Math.random() - 0.5) * 1.2, upSpeed, (Math.random() - 0.5) * 1.2);
+        const upSpeed = (18 + coreness * 22 + Math.random() * 10) * massDrag;
+        vel = new THREE.Vector3((Math.random() - 0.5) * 2, upSpeed, (Math.random() - 0.5) * 2);
       }
 
       // Bind this particle to one of the live billow cells rather than to the column axis.
@@ -3592,11 +3581,11 @@ varying float vLavaGlow;
         // the plume axisymmetric and tube-like no matter how wide it got. Instead each particle
         // tracks its own turbulent billow cell, so the plume's shape is the emergent sum of
         // dozens of independently rising, swelling, drifting clouds.
-        const alt = Math.max(0, p.y - ventY);
+                const alt = Math.max(0, p.y - ventY);
 
         // The gas-thrust root stays narrow and violent: right at the vent the jet dominates and
         // cell-following is suppressed, so the column has a tight, powerful base.
-        const jet = alt < 3.2 ? 1 - alt / 3.2 : 0;
+        const jet = alt < 9 ? 1 - alt / 9 : 0;
 
         if (e.eddy && e.eddy.life > 0) {
           const ed = e.eddy;
@@ -3618,12 +3607,12 @@ varying float vLavaGlow;
           e.vel.x += (tx - p.x) * grip * dt;
           e.vel.y += (ty - p.y) * grip * 0.75 * dt;
           e.vel.z += (tz - p.z) * grip * dt;
-        } else {
+               } else {
           // Detached — the cell that carried this particle has broken up. It now drifts on
           // its own residual buoyancy and the wind, dispersing at the plume's ragged margins.
-          const buoy = Math.max(0, 1 - alt / 17) * 3.4;
+          const buoy = Math.max(0, 1 - alt / 55) * 5.5;
           e.vel.y += (buoy - 3.0) * dt;
-          const shear = Math.min(1, alt / 13);
+          const shear = Math.min(1, alt / 45);
           e.vel.x += (this.plumeWind.x * shear - e.vel.x * 0.4) * dt * 0.6;
           e.vel.z += (this.plumeWind.z * shear - e.vel.z * 0.4) * dt * 0.6;
         }
@@ -3648,9 +3637,9 @@ varying float vLavaGlow;
         // Clots swell as they rise and entrain air — the cauliflower texture.
         e.mesh.scale.setScalar(e.size * (1 + alt * 0.13 + (1 - e.life) * 1.4));
 
-        // Dark, dirty ash — near-black in the dense lower column, lifting only to a mid grey
+                // Dark, dirty ash — near-black in the dense lower column, lifting only to a mid grey
         // in the diffuse top. Deliberately never approaches white.
-        const paleness = Math.min(1, alt / 18);
+        const paleness = Math.min(1, alt / 60);
         mat.color.setRGB(0.10 + paleness * 0.30, 0.09 + paleness * 0.28, 0.09 + paleness * 0.27);
         e.mesh.rotation.y += e.spin.y * dt * 0.3;
       }

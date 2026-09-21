@@ -43,6 +43,17 @@ export class LaharDefensePage implements OnInit, OnDestroy {
   private static readonly SFX_KEY    = 'laharaya.sfxVolume';
   private static readonly LEGACY_KEY = 'laharaya.volume';   // pre-split setting
 
+  /* ── Welcome backdrop ──────────────────────────────────────────────
+     On disk:  public\lahar-defense\assets\welcome_scene.svg
+     The mountain, foothills, plain and lahar are all in this one file. If
+     it is missing or misnamed the screen shows only sky, so a failed load
+     is logged with the exact URL tried, like the music below. */
+  readonly sceneUrl = '/lahar-defense/assets/welcome_scene.svg';
+  onSceneError(): void {
+    console.warn('[lahar] Welcome scene failed to load: ' + this.sceneUrl +
+      ' — check that welcome_scene.svg is in public/lahar-defense/assets/');
+  }
+
   private musicLevel = 0.7;
   private sfxLevel = 0.7;
 

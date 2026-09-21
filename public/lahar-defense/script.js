@@ -2,10 +2,15 @@ const wrap = document.getElementById('gameWrap');
 const canvas = document.getElementById('scene');
 // alpha:false - the scene always paints a full opaque background, so the
 // browser can skip per-pixel transparency compositing for the whole canvas.
-// desynchronized:true reduces presentation latency on touch kiosks.
 /* Reassignable: render() temporarily points ctx at the HUD overlay while
    drawing the wave gauge, then restores it. */
-let ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+// NOT desynchronized: that low-latency mode lets the display show the
+// canvas before a frame has finished drawing. On some GPUs/drivers the
+// screen then caught frames half-painted — everything drawn late in
+// render() (houses, villagers, tricycles) blinked in and out while the
+// landmarks drawn earlier stayed put. A few ms of latency is invisible on
+// a touch kiosk; half-drawn frames are not.
+let ctx = canvas.getContext('2d', { alpha: false });
 
 const churchImg = new Image();
 churchImg.src = 'assets/porac/porac_church.png'; 
@@ -474,6 +479,79 @@ function playSfx(name, fallback, gainMul) {
   } catch (e) {
     if (fallback) fallback();
   }
+}
+
+
+/* ---- MONEY BAG COLLECTED ----
+   Collecting money used to be silent. It now sounds like cash actually
+   landing in the till: a spill of coins clinking together (more coins for
+   a bigger bag), then a cash-register "cha-ching" as the money lands.
+
+   A recorded effect wins if one is provided — drop money_collect.mp3 (or
+   .ogg/.wav) into the sound-effect folder — otherwise this synthesised
+   version plays, so collecting is never silent.
+
+   Coins are built from inharmonic metal partials (a real coin's ring is
+   not a musical note), each with a hard click at the start and a fast,
+   bright decay. The register "cha" is a short burst of filtered noise;
+   the "ching" is a two-bell strike that rings out. */
+function playMoneySound(value) {
+  playSfx('money_collect', () => synthMoneySound(value));
+}
+function synthMoneySound(value) {
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime + 0.01;
+    const coin = (t, f, vol) => {
+      [1, 1.53, 2.46, 3.9].forEach((ratio, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'sine';
+        o.frequency.value = f * ratio;
+        const dur = 0.24 - i * 0.045;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol / (1 + i * 0.7), t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(masterGain);
+        o.start(t); o.stop(t + dur + 0.02);
+      });
+      noiseBurst(t, 0.012, 'highpass', 6000, vol * 0.6);      // the click of contact
+    };
+    const noiseBurst = (t, dur, type, freq, vol) => {
+      const len = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+      const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = audioCtx.createBufferSource(); src.buffer = buf;
+      const flt = audioCtx.createBiquadFilter(); flt.type = type; flt.frequency.value = freq; flt.Q.value = 1.2;
+      const g = audioCtx.createGain(); g.gain.value = vol;
+      src.connect(flt); flt.connect(g); g.connect(masterGain);
+      src.start(t); src.stop(t + dur + 0.01);
+    };
+    // 1. The coin spill: bigger bags pour more coins, tumbling and slowing
+    const n = value >= 200_000 ? 7 : value >= 100_000 ? 5 : 4;
+    let t = now;
+    for (let k = 0; k < n; k++) {
+      coin(t, 2300 + Math.random() * 1500, 0.07 + Math.random() * 0.03);
+      t += 0.035 + k * 0.012 + Math.random() * 0.02;
+    }
+    // 2. Cha-ching as it lands in the till
+    const ch = t + 0.04;
+    noiseBurst(ch, 0.07, 'bandpass', 3200, 0.12);            // "cha": the drawer mechanism
+    noiseBurst(ch, 0.03, 'lowpass', 700, 0.14);              // its knock
+    [[1318, 0.11], [1976, 0.08]].forEach(([f, v], i) => {     // "ching": two bells, E6 + B6
+      const at = ch + 0.07 + i * 0.05;
+      [1, 2.01, 2.76].forEach((ratio, j) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = j === 0 ? 'triangle' : 'sine';
+        o.frequency.value = f * ratio;
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(v / (1 + j), at + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9 - j * 0.25);
+        o.connect(g); g.connect(masterGain);
+        o.start(at); o.stop(at + 0.95);
+      });
+    });
+  } catch (e) { /* audio unavailable — the coins still fly */ }
 }
 
 function playSound(type) {
@@ -1066,7 +1144,7 @@ let state = {
   skyTransition: 0, screenShake: 0, lightningFlash: 0,
   lightningPath: [],
   laharProgresses: [0, 0, 0], branchProgresses: [],
-  placedItems: [], toolsPlacedTotal: 0, dust: [],
+  placedItems: [], toolsPlacedTotal: 0, dust: [], toolboxAutoOpened: false,
   boulders: [], burialLevel: 0, bankScars: [], hazardTimer: 0, bridgeWarn: null,
   houses: [], church: null, school: null, robot: null, monument: null, bridge: null,
   particles: [], flowParticles: [], ripples: [],
@@ -1079,7 +1157,7 @@ let state = {
   carsFleeing: false, carsFleeStartAmbient: 0,
   villagersFleeing: false, villagersFleeStartAmbient: 0,
   // Falling sun collectibles
-  fallingSuns: [], sunSpawnTimer: 6,
+  fallingSuns: [], coinFx: [], sunSpawnTimer: 6,
   // 3-wave campaign: which wave (0=Easy,1=Medium,2=Hard) is active, and
   // a >0 countdown (seconds remaining) during the between-wave prep
   // pause — see beginWaveTransition()/startWave() below.
@@ -2099,9 +2177,8 @@ function buildSpeckles(rand, minX, maxX, topY, baseY, count) {
 // so the mudflow visually emerges straight out of the breached crater wall.
 const CRATER_X = 292, CRATER_Y = 180;
 
-// Tool-placement boundary: the main Pinatubo massif silhouette (see
-// frontAnchors in paintMountainScene) never dips below y=345 at its
-// lowest edges, and the sky above it obviously isn't placeable either.
+// Tool-placement boundary: the main Pinatubo massif skyline (see
+// MASSIF_LEFT / MASSIF_RIGHT) stays well above this line, and the sky above it obviously isn't placeable either.
 // A small margin below that (360) is used as the "you're now on solid
 // ground" line — anywhere at or below this y is grass/town, anywhere
 // above it is volcano or open sky, regardless of x.
@@ -2366,7 +2443,7 @@ function paintMountainScene(context, mode) {
   /* ---- 1. Distant Hazy Back Range (Zambales Mountains) ---- */
   const backAnchors = [
     { x: -15, y: 270 }, { x: 55, y: 200 }, { x: 120, y: 235 }, { x: 175, y: 185 },
-    { x: 235, y: 160 }, { x: 300, y: 145 }, { x: 355, y: 170 }, { x: 410, y: 195 },
+    { x: 235, y: 168 }, { x: 300, y: 182 }, { x: 355, y: 176 }, { x: 410, y: 195 },
     { x: 465, y: 220 }, { x: 555, y: 270 }
   ];
   context.save();
@@ -2420,407 +2497,504 @@ function paintMountainScene(context, mode) {
   context.restore();
 
   /* ---- 3. Main Mount Pinatubo Massif ----
-     Modelled on the mountain as it actually looks after June 1991: the old
-     summit was blown off, leaving a broad ~2.5 km caldera, so the top reads
-     as a WIDE, TRUNCATED bowl (not a pointed cone) holding the turquoise
-     crater lake. The flanks are pale grey pumice/ash rather than brown
-     rock, deeply carved by radial gullies and fine "badland" rills, with
-     tropical regrowth creeping back up the lower slopes and pale, flat
-     pyroclastic-deposit fans spreading out at the foot of each channel. ---- */
-  const RIM_Y = CRATER_Y - 16;   // height of the far (back) caldera rim
-  const frontAnchors = [
-    { x: -15, y: 350 }, { x: 40, y: 302 }, { x: 86, y: 264 }, { x: 126, y: 270 },
-    { x: 164, y: 236 }, { x: 198, y: 212 }, { x: 224, y: 190 },
-    { x: 243, y: 172 }, { x: 258, y: RIM_Y + 2 }, { x: 274, y: RIM_Y - 3 },
-    { x: CRATER_X, y: RIM_Y + 1 }, { x: 310, y: RIM_Y - 4 }, { x: 328, y: RIM_Y - 1 },
-    { x: 346, y: 173 }, { x: 368, y: 190 }, { x: 400, y: 210 }, { x: 436, y: 234 },
-    { x: 475, y: 266 }, { x: 555, y: 325 }
-  ];
+     Redrawn to match the real post-1991 mountain rather than a textbook
+     cone. The June 1991 eruption blew the summit off, so seen from the
+     Pampanga lowlands Pinatubo is a BROAD, LOW massif with a flat, jagged,
+     many-peaked top — the rim of a 2.5 km caldera. Inside sits the
+     turquoise crater lake, walled by steep fluted cliffs that are now
+     green with regrowth. The outer flanks are a fan of green ridges
+     separated by pale, sand-filled lahar valleys that spread wider the
+     further downhill they run. See paintPinatuboMassif(). ---- */
+  paintPinatuboMassif(context, isNight);
+}
 
-  context.save();
-  traceJaggedRidge(context, frontAnchors, 510, FRONT_RIDGE_SEED, 14);
-  context.clip();
+/* =====================================================================
+   MOUNT PINATUBO — 2D game-style massif
+   ---------------------------------------------------------------------
+   Built from a few hand-placed outlines (silhouette, far caldera rim,
+   near caldera lip) plus seeded procedural ridges. Everything is flat,
+   cel-shaded facets with crisp edges so it reads as game art, not a
+   photo, while keeping the landmarks visitors recognise from photos:
+     - a truncated, jagged skyline instead of a pointed peak
+     - the sunken turquoise lake with steep green-and-rock inner walls
+     - the breach notch in the near rim, where lahars spill out
+     - green ridges and grey-white lahar sand valleys on the flanks
+   Sun comes from the upper-left, matching the sky and the rest of the
+   scene. Painted once per lighting state into the mountain cache.
+   ===================================================================== */
+const MASSIF_BASE_Y = 520;
 
-  // Key lighting: sun from the upper-left. Pale pumice-grey palette —
-  // fresh Pinatubo ash is near-white/buff, weathering to mid grey.
-  const lightGrad = context.createLinearGradient(0, 130, 540, 430);
-  if (isNight) {
-    lightGrad.addColorStop(0, '#3a424d');
-    lightGrad.addColorStop(0.3, '#2a313b');
-    lightGrad.addColorStop(0.55, '#1c222b');
-    lightGrad.addColorStop(0.8, '#12171e');
-    lightGrad.addColorStop(1, '#0b0e13');
-  } else {
-    lightGrad.addColorStop(0, '#dcd6ca');
-    lightGrad.addColorStop(0.25, '#bab2a5');
-    lightGrad.addColorStop(0.5, '#928b7f');
-    lightGrad.addColorStop(0.75, '#67615a');
-    lightGrad.addColorStop(1, '#3c3833');
+// Outer skyline, left shoulder → far caldera rim → right shoulder.
+const MASSIF_LEFT = [
+  { x: -20, y: 300 }, { x: 18, y: 283 }, { x: 56, y: 265 }, { x: 86, y: 250 },
+  { x: 100, y: 240 }, { x: 116, y: 242 }, { x: 138, y: 224 }, { x: 156, y: 205 },
+  { x: 170, y: 190 }, { x: 184, y: 177 }
+];
+// The far rim: a broken crown of small peaks, highest on the right,
+// as in photos of the caldera taken from the east.
+const CALDERA_FAR_RIM = [
+  { x: 184, y: 177 }, { x: 193, y: 164 }, { x: 202, y: 160 }, { x: 211, y: 151 },
+  { x: 221, y: 155 }, { x: 231, y: 147 }, { x: 244, y: 152 }, { x: 256, y: 148 },
+  { x: 269, y: 154 }, { x: 281, y: 150 }, { x: 295, y: 155 }, { x: 307, y: 147 },
+  { x: 318, y: 139 }, { x: 328, y: 144 }, { x: 340, y: 151 }, { x: 352, y: 148 },
+  { x: 366, y: 156 }, { x: 378, y: 153 }, { x: 391, y: 164 }, { x: 403, y: 177 }
+];
+const MASSIF_RIGHT = [
+  { x: 403, y: 177 }, { x: 418, y: 189 }, { x: 436, y: 202 }, { x: 452, y: 209 },
+  { x: 464, y: 204 }, { x: 478, y: 213 }, { x: 500, y: 229 }, { x: 528, y: 246 },
+  { x: 560, y: 264 }
+];
+// Near (front) lip of the caldera. It sits lower than the far rim, which
+// is what lets the player look down into the lake. The dip at CRATER_X is
+// the breach notch the lahar channels leave through.
+const CALDERA_NEAR_LIP = [
+  { x: 184, y: 177 }, { x: 202, y: 187 }, { x: 222, y: 194 }, { x: 246, y: 199 },
+  { x: 266, y: 201 }, { x: 282, y: 202 }, { x: 286, y: 209 }, { x: 299, y: 209 },
+  { x: 303, y: 202 }, { x: 320, y: 201 }, { x: 341, y: 198 }, { x: 363, y: 193 },
+  { x: 384, y: 186 }, { x: 403, y: 177 }
+];
+
+// Crest the outer flank hangs from: the shoulders plus the NEAR lip (the
+// far rim is hidden behind the lake from the outside).
+const MASSIF_CREST = MASSIF_LEFT.concat(CALDERA_NEAR_LIP.slice(1), MASSIF_RIGHT.slice(1));
+
+function polylineYAt(pts, x) {
+  if (x <= pts[0].x) return pts[0].y;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (x >= a.x && x <= b.x) return a.y + (b.y - a.y) * ((x - a.x) / ((b.x - a.x) || 1));
   }
-  context.fillStyle = lightGrad;
-  context.fillRect(0, 130, 540, 390);
+  return pts[pts.length - 1].y;
+}
 
-  // Fresh ash/pumice cap: the summit area is the palest, bleached
-  // near-white by the thick 1991 tephra blanket.
-  const capGrad = context.createRadialGradient(CRATER_X, CRATER_Y + 20, 10, CRATER_X, CRATER_Y + 40, 170);
-  capGrad.addColorStop(0, isNight ? 'rgba(200,210,225,0.16)' : 'rgba(242,238,228,0.55)');
-  capGrad.addColorStop(0.55, isNight ? 'rgba(200,210,225,0.05)' : 'rgba(242,238,228,0.18)');
-  capGrad.addColorStop(1, 'rgba(242,238,228,0)');
-  context.fillStyle = capGrad;
-  context.fillRect(0, 130, 540, 390);
-
-  // Subtle weathered-rock patches (kept muted so the pumice reads pale)
-  context.save();
-  context.globalAlpha = 0.55;
-  drawVolcanicRockPatches(context, isNight, 6060);
-  context.restore();
-
-  // Vertical atmospheric depth falloff
-  const depthGrad = context.createLinearGradient(0, 145, 0, 510);
-  depthGrad.addColorStop(0, isNight ? 'rgba(255,255,255,0.06)' : 'rgba(255,248,230,0.22)');
-  depthGrad.addColorStop(0.45, 'rgba(0,0,0,0)');
-  depthGrad.addColorStop(1, isNight ? 'rgba(0,0,0,0.38)' : 'rgba(38,26,16,0.26)');
-  context.fillStyle = depthGrad;
-  context.fillRect(0, 130, 540, 390);
-
-  // Tropical regrowth: three decades on, cogon grass and scrub have crept
-  // back up the lower flanks, leaving only the summit and channel floors bare.
-  const regrowGrad = context.createLinearGradient(0, 270, 0, 510);
-  if (isNight) {
-    regrowGrad.addColorStop(0, 'rgba(18,34,26,0)');
-    regrowGrad.addColorStop(0.45, 'rgba(18,34,26,0.35)');
-    regrowGrad.addColorStop(1, 'rgba(12,26,20,0.6)');
-  } else {
-    regrowGrad.addColorStop(0, 'rgba(72,104,60,0)');
-    regrowGrad.addColorStop(0.45, 'rgba(70,102,58,0.42)');
-    regrowGrad.addColorStop(1, 'rgba(54,86,48,0.66)');
-  }
-  context.fillStyle = regrowGrad;
-  context.fillRect(0, 270, 540, 250);
-
-  // Uneven regrowth: patchy scrub clumps, denser lower down
-  const veg = mulberry32(555);
-  for (let i = 0; i < 64; i++) {
-    const vx = 10 + veg() * 520;
-    const vy = 300 + veg() * veg() * 200 + 10;
-    const vs = 4 + veg() * 7;
-    const a = 0.22 + veg() * 0.3;
-    context.fillStyle = isNight ? `rgba(16,32,24,${a})` : `rgba(50,80,42,${a})`;
-    context.beginPath();
-    context.ellipse(vx, vy, vs, vs * 0.55, 0, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  // Soft ridge/valley striations on the upper flanks (large-scale relief),
-  // fading out before the vegetated lower slopes so they never read as bars.
-  const ridgeRand = mulberry32(7331);
-  for (let i = 0; i < 22; i++) {
-    const rx = 15 + ridgeRand() * 510;
-    const topY = 154 + (0.08 + ridgeRand() * 0.12) * 270;
-    const sway = (ridgeRand() - 0.5) * 28;
-    const dark = ridgeRand() > 0.5;
-    const sg = context.createLinearGradient(0, topY, 0, 360);
-    sg.addColorStop(0, dark ? (isNight ? 'rgba(0,0,0,0.18)' : 'rgba(40,32,24,0.12)')
-                            : (isNight ? 'rgba(255,255,255,0.05)' : 'rgba(255,250,236,0.14)'));
-    sg.addColorStop(1, 'rgba(0,0,0,0)');
-    context.strokeStyle = sg;
-    context.lineWidth = 3 + ridgeRand() * 5.5;
-    context.beginPath();
-    context.moveTo(rx, topY);
-    context.quadraticCurveTo(rx + sway, (topY + 360) / 2, rx + sway * 1.6, 360);
-    context.stroke();
-  }
-
-  // Deep radial erosion gullies — the signature of post-1991 Pinatubo.
-  // Each fans out from the caldera rim and widens downslope. Drawn as a
-  // single tapered polygon (pale ash floor) with a dark shadowed wall on
-  // the right and a thin sunlit lip on the left (sun upper-left), plus a
-  // few feeder rills near the head where the slope is most dissected.
-  const gullyRand = mulberry32(4455);
-  const gullyCount = 11;
-  const gullyEnds = [];
-  const offsetPoly = (pts, widthAt, sideSign) => {
-    // Builds a closed polygon from the centreline out to sideSign*width.
-    const out = [];
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
-      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len, ny = dx / len;
-      const w = widthAt(i / (pts.length - 1));
-      out.push({ x: pts[i].x + nx * w * sideSign, y: pts[i].y + ny * w * sideSign });
-    }
-    return out;
-  };
-  const fillBand = (pts, wL, wR, style) => {
-    const left = offsetPoly(pts, wL, -1), right = offsetPoly(pts, wR, 1);
-    context.beginPath();
-    left.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
-    for (let i = right.length - 1; i >= 0; i--) context.lineTo(right[i].x, right[i].y);
+function traceMassifSilhouette(context, closed) {
+  const sky = MASSIF_LEFT.concat(CALDERA_FAR_RIM.slice(1), MASSIF_RIGHT.slice(1));
+  context.beginPath();
+  sky.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+  if (closed) {
+    context.lineTo(560, MASSIF_BASE_Y);
+    context.lineTo(-20, MASSIF_BASE_Y);
     context.closePath();
-    context.fillStyle = style;
-    context.fill();
+  }
+}
+
+// Vertical colour ramp: bare pumice and rock high up, cogon grass and
+// scrub lower down. One ramp per light level keeps the facets cel-shaded;
+// the ramps converge toward the foot so the lower slopes read as one
+// green apron rather than stripes.
+const MASSIF_RAMPS = {
+  hi:     ['#efe5cf', '#d8cdad', '#a9b077', '#80a05a', '#648b48'],
+  midHi:  ['#d9ceb5', '#c1b593', '#949f64', '#6f9149', '#58813f'],
+  mid:    ['#bdb199', '#a5997b', '#7e8b54', '#618243', '#517739'],
+  shadow: ['#9a8f7b', '#877c64', '#667446', '#506e3a', '#476a3b']
+};
+function massifRamp(context, name) {
+  const g = context.createLinearGradient(0, 150, 0, 470);
+  const c = MASSIF_RAMPS[name];
+  g.addColorStop(0, c[0]); g.addColorStop(0.25, c[1]); g.addColorStop(0.46, c[2]);
+  g.addColorStop(0.7, c[3]); g.addColorStop(1, c[4]);
+  return g;
+}
+
+function fillBetween(context, a, b, style) {
+  context.beginPath();
+  a.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+  for (let i = b.length - 1; i >= 0; i--) context.lineTo(b[i].x, b[i].y);
+  context.closePath();
+  context.fillStyle = style;
+  context.fill();
+}
+
+// Band of varying width either side of a centreline (for valley floors).
+function fillRibbon(context, pts, widthAt, shiftX, style) {
+  const L = [], R = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const w = Math.max(0, widthAt(i / (pts.length - 1)));
+    L.push({ x: pts[i].x + shiftX - nx * w, y: pts[i].y - ny * w });
+    R.push({ x: pts[i].x + shiftX + nx * w, y: pts[i].y + ny * w });
+  }
+  fillBetween(context, L, R, style);
+}
+
+function strokeLine(context, pts, from, to) {
+  context.beginPath();
+  for (let i = from; i <= to; i++) i === from ? context.moveTo(pts[i].x, pts[i].y) : context.lineTo(pts[i].x, pts[i].y);
+  context.stroke();
+}
+
+function paintPinatuboMassif(context, isNight) {
+  const STEPS = 14;
+  const rnd = mulberry32(5150);
+
+  // Spur ridges fanning out from the crest, irregularly spaced. Each one
+  // bows by its own amount, so they never read as parallel stripes.
+  const ridgeXs = [-6, 52, 104, 150, 196, 236, 270, 318, 350, 388, 430, 484, 548];
+  const makeLine = (x0, y0, jitter, reach, bow) => {
+    const xe = CRATER_X + (x0 - CRATER_X) * reach;
+    const pts = [];
+    let wander = 0;
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      const spread = 1 - Math.pow(1 - t, bow);
+      if (i > 0) wander += (rnd() - 0.5) * jitter;
+      pts.push({ x: x0 + (xe - x0) * spread + wander * t, y: y0 + (MASSIF_BASE_Y - y0) * t });
+    }
+    return pts;
   };
-  for (let g = 0; g < gullyCount; g++) {
-    const angle = (Math.PI * 0.06) + (g / (gullyCount - 1)) * (Math.PI * 0.88) + (gullyRand() - 0.5) * 0.16;
-    const startR = 56 + gullyRand() * 14;
-    const meander = gullyRand() * Math.PI * 2;
-    const dx = Math.cos(angle);
-    const dy = 0.6 + Math.max(0, Math.sin(angle)) * 0.45;
-    const pts = [{
-      x: CRATER_X + dx * startR,
-      y: CRATER_Y + 14 + Math.sin(angle) * startR * 0.4
-    }];
-    const steps = 5 + Math.floor(gullyRand() * 3);
-    for (let s = 0; s < steps; s++) {
-      const prev = pts[pts.length - 1];
-      // Gentle sinuous meander so the channels don't read as straight spokes
-      const swing = Math.sin(meander + s * 1.4) * 9 + (gullyRand() - 0.5) * 10;
+  const ridges = ridgeXs.map(x =>
+    makeLine(x, polylineYAt(MASSIF_CREST, x), 9, 1.35 + rnd() * 0.45, 1.4 + rnd() * 1.1));
+
+  // A valley between every pair of ridges. The one in the middle starts
+  // at the bottom of the breach notch — it is the main lahar outlet.
+  const valleys = [];
+  for (let i = 0; i < ridges.length - 1; i++) {
+    const A = ridges[i], B = ridges[i + 1];
+    const mx = (A[0].x + B[0].x) / 2;
+    const isNotch = mx > 283 && mx < 302;
+    const y0 = isNotch ? 209 : polylineYAt(MASSIF_CREST, mx) + 5;
+    const bias = 0.35 + rnd() * 0.3;           // valleys sit off-centre
+    const pts = [{ x: isNotch ? CRATER_X + 0.5 : mx, y: y0 }];
+    const phase = rnd() * 6.28;
+    for (let s = 1; s <= STEPS; s++) {
+      const t = s / STEPS;
       pts.push({
-        x: prev.x + dx * (12 + gullyRand() * 9) + swing,
-        y: prev.y + dy * (13 + gullyRand() * 8) + 4
+        x: A[s].x + (B[s].x - A[s].x) * bias + Math.sin(phase + t * 6) * (1.5 + t * 5),
+        y: y0 + (MASSIF_BASE_Y - y0) * t
       });
     }
-    gullyEnds.push(pts[pts.length - 1]);
-
-    // Pale ash channel floor, tapering from a hairline at the rim
-    fillBand(pts, t => 0.6 + t * 3.2, t => 0.6 + t * 3.2,
-      isNight ? 'rgba(120,130,145,0.18)' : 'rgba(226,220,208,0.55)');
-    // Shadowed right-hand wall
-    fillBand(pts, t => -0.2, t => 1.2 + t * 4.2,
-      isNight ? 'rgba(0,0,0,0.42)' : 'rgba(30,22,16,0.34)');
-    // Sunlit left-hand lip
-    fillBand(pts, t => 0.9 + t * 3.6, t => 0.2 + t * 2.4,
-      isNight ? 'rgba(255,255,255,0.06)' : 'rgba(255,250,236,0.45)');
-
-    // Feeder rills joining the gully near its head (badland dissection)
-    const rills = 2 + Math.floor(gullyRand() * 3);
-    context.lineCap = 'butt';
-    for (let r = 0; r < rills; r++) {
-      const j = 1 + Math.floor(gullyRand() * Math.min(4, steps - 1));
-      const side = gullyRand() < 0.5 ? -1 : 1;
-      const len = 9 + gullyRand() * 14;
-      context.strokeStyle = isNight ? 'rgba(0,0,0,0.3)' : 'rgba(34,26,18,0.24)';
-      context.lineWidth = 1;
-      context.beginPath();
-      context.moveTo(pts[j].x + side * len, pts[j].y - len * 0.9);
-      context.quadraticCurveTo(pts[j].x + side * len * 0.4, pts[j].y - len * 0.3, pts[j].x, pts[j].y);
-      context.stroke();
-    }
+    // Only some valleys carry lahar sand all the way down; the rest are
+    // grassed-over ravines.
+    valleys.push({ pts, isNotch, sandy: isNotch || rnd() < 0.55, startT: 0.08 + rnd() * 0.2 });
   }
 
-  // Pyroclastic-flow deposit fans at the channel mouths: flat, pale,
-  // terrace-like aprons of loose ash that the lahars later remobilise.
-  const fanRand = mulberry32(9090);
-  gullyEnds.forEach((e, i) => {
-    const rw = 26 + fanRand() * 18, rh = 10 + fanRand() * 6;
-    const fan = context.createRadialGradient(e.x, e.y + 6, 2, e.x, e.y + 6, rw);
-    fan.addColorStop(0, isNight ? 'rgba(120,130,145,0.22)' : 'rgba(226,220,208,0.55)');
-    fan.addColorStop(0.6, isNight ? 'rgba(120,130,145,0.08)' : 'rgba(226,220,208,0.22)');
-    fan.addColorStop(1, 'rgba(226,220,208,0)');
-    context.fillStyle = fan;
-    context.beginPath();
-    context.ellipse(e.x, e.y + 6, rw, rh, 0, 0, Math.PI * 2);
-    context.fill();
-  });
-
-  // Fine ash speckle (very sparse — pumice is smooth-toned)
-  buildSpeckles(mulberry32(2024), 20, 520, 160, 470, 180).forEach(s => {
-    context.fillStyle = isNight ? 'rgba(0,0,0,1)' : 'rgba(42,30,20,1)';
-    context.globalAlpha = s.alpha * 0.8;
-    context.fillRect(s.x, s.y, s.size, s.size);
-  });
-  context.globalAlpha = 1;
-
-  // Summit caldera with crater lake (drawn last so it sits on top of the flanks)
-  paintPinatuboCaldera(context, isNight);
-
-  context.restore(); // end clip
-
-  // Silhouette edge light
   context.save();
-  traceJaggedRidge(context, frontAnchors, undefined, FRONT_RIDGE_SEED, 14);
-  context.strokeStyle = isNight ? 'rgba(185,200,225,0.12)' : 'rgba(255,248,232,0.5)';
-  context.lineWidth = 1.8;
+  traceMassifSilhouette(context, true);
+  context.fillStyle = massifRamp(context, 'mid');
+  context.fill();
+  context.clip();
+
+  // Cel-shaded spur faces: the side of each spur facing the sun (left)
+  // is lit, the side facing away is in shade. The whole right flank is
+  // one step darker again, which gives the massif its big-form volume.
+  for (let i = 0; i < valleys.length; i++) {
+    const A = ridges[i], B = ridges[i + 1], V = valleys[i].pts;
+    const rightFlank = V[0].x > CRATER_X + 10;
+    fillBetween(context, A, V, massifRamp(context, rightFlank ? 'shadow' : 'mid'));
+    fillBetween(context, V, B, massifRamp(context, rightFlank ? 'midHi' : 'hi'));
+  }
+
+  // Broad light: brighter upper-left, falling off to the lower-right
+  const macro = context.createLinearGradient(120, 150, 470, 470);
+  macro.addColorStop(0, 'rgba(255,248,228,0.16)');
+  macro.addColorStop(0.5, 'rgba(255,248,228,0)');
+  macro.addColorStop(1, 'rgba(24,34,20,0.2)');
+  context.fillStyle = macro;
+  context.fillRect(-20, 130, 580, 400);
+
+  // Badland rills: short feather-like cuts on the upper, bare slopes,
+  // running from each spur down into its valley.
+  const rill = mulberry32(9043);
+  context.lineCap = 'round';
+  for (let i = 0; i < valleys.length; i++) {
+    const V = valleys[i].pts;
+    [ridges[i], ridges[i + 1]].forEach((R, side) => {
+      for (let s = 1; s < STEPS * 0.55; s++) {
+        if (rill() < 0.35) continue;
+        const u = 0.25 + rill() * 0.5;
+        const sx = R[s].x + (V[s].x - R[s].x) * u, sy = R[s].y;
+        const ex = V[s + 1].x + (R[s + 1].x - V[s + 1].x) * 0.15, ey = V[s + 1].y - 2;
+        context.strokeStyle = side ? 'rgba(90,76,58,0.28)' : 'rgba(70,58,44,0.32)';
+        context.lineWidth = 0.9;
+        context.beginPath();
+        context.moveTo(sx, sy);
+        context.quadraticCurveTo((sx + ex) / 2, sy + 1, sx + (ex - sx) * 0.7, sy + (ey - sy) * 0.7);
+        context.stroke();
+      }
+    });
+  }
+
+  // Tributary gullies branching off the main valleys
+  const trib = mulberry32(611);
+  valleys.forEach((v, idx) => {
+    const n = 1 + Math.floor(trib() * 2);
+    for (let k = 0; k < n; k++) {
+      const s0 = 4 + Math.floor(trib() * 6);
+      const side = trib() < 0.5 ? -1 : 1;
+      const R = side < 0 ? ridges[idx] : ridges[idx + 1];
+      const p = v.pts[s0];
+      const q = { x: p.x + (R[s0 - 2].x - p.x) * 0.7, y: R[s0 - 2].y };
+      context.strokeStyle = 'rgba(52,44,32,0.45)';
+      context.lineWidth = 1.1;
+      context.beginPath();
+      context.moveTo(q.x, q.y);
+      context.quadraticCurveTo(p.x + (q.x - p.x) * 0.2, q.y + (p.y - q.y) * 0.6, p.x, p.y);
+      context.stroke();
+      context.strokeStyle = 'rgba(250,244,226,0.3)';
+      context.beginPath();
+      context.moveTo(q.x - 1.2, q.y + 0.5);
+      context.quadraticCurveTo(p.x + (q.x - p.x) * 0.2 - 1.2, q.y + (p.y - q.y) * 0.6, p.x - 1.2, p.y);
+      context.stroke();
+    }
+  });
+
+  // Bare rock scarp just under the lip: the steep upper cone where the
+  // 1991 blast stripped everything.
+  const scarp = context.createLinearGradient(0, 180, 0, 232);
+  scarp.addColorStop(0, 'rgba(236,228,210,0.55)');
+  scarp.addColorStop(1, 'rgba(236,228,210,0)');
+  context.fillStyle = scarp;
+  context.beginPath();
+  CALDERA_NEAR_LIP.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+  context.lineTo(440, 232); context.lineTo(150, 232);
+  context.closePath(); context.fill();
+
+  // Foothills: two rows of rounded, grass-covered hills in front of the
+  // massif. From the Pampanga lowlands Pinatubo is always seen over these,
+  // and they break the long flank into near and far.
+  const hillRand = mulberry32(4747);
+  const hillRows = [
+    { top: 322, spread: 20, hw: [50, 66], step: 92, lit: '#7d9a58', shade: '#5f7d45', rim: 'rgba(232,236,200,0.45)' },
+    { top: 376, spread: 18, hw: [46, 62], step: 84, lit: '#6f9150', shade: '#52743d', rim: 'rgba(222,232,190,0.4)' }
+  ];
+  hillRows.forEach((row, ri) => {
+    for (let cx = -30 + ri * 40 + hillRand() * 20; cx < 580; cx += row.step + hillRand() * 24) {
+      const hw = row.hw[0] + hillRand() * (row.hw[1] - row.hw[0]);
+      const top = row.top + hillRand() * row.spread;
+      const hump = () => {
+        context.beginPath();
+        context.moveTo(cx - hw * 1.6, MASSIF_BASE_Y);
+        context.bezierCurveTo(cx - hw * 1.35, top + 40, cx - hw * 0.7, top, cx, top);
+        context.bezierCurveTo(cx + hw * 0.7, top, cx + hw * 1.35, top + 40, cx + hw * 1.6, MASSIF_BASE_Y);
+        context.closePath();
+      };
+      context.save();
+      hump();
+      context.fillStyle = row.lit;
+      context.fill();
+      context.clip();
+      // shaded right side, split along a soft S so it reads as rounded
+      context.beginPath();
+      context.moveTo(cx + hw * 0.1, top - 2);
+      context.bezierCurveTo(cx + hw * 0.55, top + 22, cx + hw * 0.25, top + 70, cx + hw * 0.5, MASSIF_BASE_Y);
+      context.lineTo(cx + hw * 1.7, MASSIF_BASE_Y);
+      context.lineTo(cx + hw * 1.7, top - 2);
+      context.closePath();
+      context.fillStyle = row.shade;
+      context.fill();
+      context.restore();
+      // sunlit crest on the left shoulder, soft outline on the right
+      context.lineCap = 'round';
+      context.strokeStyle = row.rim;
+      context.lineWidth = 1.4;
+      context.beginPath();
+      context.moveTo(cx - hw * 0.95, top + 12);
+      context.bezierCurveTo(cx - hw * 0.6, top + 2, cx - hw * 0.3, top + 0.3, cx + hw * 0.1, top + 0.4);
+      context.stroke();
+      context.strokeStyle = 'rgba(44,60,32,0.35)';
+      context.lineWidth = 1.2;
+      context.beginPath();
+      context.moveTo(cx + hw * 0.1, top + 0.4);
+      context.bezierCurveTo(cx + hw * 0.5, top + 1, cx + hw * 0.9, top + 8, cx + hw * 1.05, top + 18);
+      context.stroke();
+    }
+  });
+
+  // Valleys: a dark ravine crease everywhere, and on the sandy ones a
+  // pale lahar-sand floor that widens downhill with braided channels —
+  // the grey-white river beds that are Pinatubo's signature from the air.
+  valleys.forEach((v, idx) => {
+    const pts = v.pts;
+    context.lineJoin = 'round';
+    context.strokeStyle = 'rgba(48,40,30,0.6)';
+    context.lineWidth = 1.5;
+    strokeLine(context, pts, 0, STEPS);
+    context.strokeStyle = 'rgba(250,244,226,0.35)';
+    context.lineWidth = 0.8;
+    context.save(); context.translate(-1.4, 0); strokeLine(context, pts, 0, STEPS); context.restore();
+    if (!v.sandy) return;
+    const k = v.isNotch ? 1.55 : 0.8 + (idx % 3) * 0.2;
+    const st = v.isNotch ? 0 : v.startT;
+    const w = t => t < st ? 0 : Math.pow((t - st) / (1 - st), 1.6) * 11 * k + 0.6;
+    fillRibbon(context, pts, t => w(t) + 1.2, 1.6, 'rgba(74,62,46,0.5)');
+    fillRibbon(context, pts, w, 0, '#d9cdb3');
+    fillRibbon(context, pts, t => w(t) * 0.45, -0.8, '#eee6d4');
+    context.strokeStyle = 'rgba(150,138,114,0.55)';
+    context.lineWidth = 0.8;
+    for (let b = -1; b <= 1; b += 2) {
+      const from = Math.ceil(STEPS * Math.max(st + 0.25, 0.4));
+      context.beginPath();
+      for (let i = from; i <= STEPS; i++) {
+        const t = i / STEPS, p = pts[i];
+        const x = p.x + b * w(t) * 0.45 + Math.sin(i * 1.9 + idx * 2) * w(t) * 0.25;
+        i === from ? context.moveTo(x, p.y) : context.lineTo(x, p.y);
+      }
+      context.stroke();
+    }
+  });
+
+  // Scrub and tree clumps on the lower spurs (kept out of sand valleys).
+  // Larger lower down, since the foot is nearer the viewer.
+  const bushRand = mulberry32(2718);
+  const sandAt = [];
+  valleys.forEach(v => { if (v.sandy) sandAt.push(v); });
+  let placed = 0;
+  for (let tries = 0; tries < 400 && placed < 70; tries++) {
+    const x = -10 + bushRand() * 560;
+    const y = 238 + Math.pow(bushRand(), 0.8) * 240;
+    if (y < polylineYAt(MASSIF_CREST, x) + 30) continue;
+    const ti = Math.round(((y - 200) / (MASSIF_BASE_Y - 200)) * STEPS);
+    const i = Math.max(0, Math.min(STEPS, ti));
+    if (sandAt.some(v => Math.abs(v.pts[i].x - x) < 6 + ((y - 200) / 320) * 16)) continue;
+    placed++;
+    const s = 2 + (y - 238) / 70 + bushRand() * 1.3;
+    const lit = x < CRATER_X + 20;
+    context.fillStyle = lit ? '#3e6934' : '#35602f';
+    context.beginPath();
+    context.arc(x - s * 0.8, y, s, 0, Math.PI * 2);
+    context.arc(x + s * 0.8, y + s * 0.1, s * 0.9, 0, Math.PI * 2);
+    context.arc(x, y - s * 0.7, s * 1.05, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = lit ? '#6f9d4f' : '#5d8a45';
+    context.beginPath();
+    context.arc(x - s * 0.5, y - s * 1.0, s * 0.55, 0, Math.PI * 2);
+    context.arc(x - s * 1.1, y - s * 0.3, s * 0.45, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  // Summit caldera and lake on top of the flanks
+  paintPinatuboCaldera(context);
+
+  // Aerial haze toward the foot, so the massif sits back behind the plain
+  const foot = context.createLinearGradient(0, 300, 0, MASSIF_BASE_Y);
+  foot.addColorStop(0, 'rgba(206,222,234,0)');
+  foot.addColorStop(1, 'rgba(206,222,234,0.32)');
+  context.fillStyle = foot;
+  context.fillRect(-20, 300, 580, MASSIF_BASE_Y - 300);
+
+  // Night: one flat moonlit tint over the whole massif
+  if (isNight) {
+    context.fillStyle = 'rgba(10,16,30,0.74)';
+    context.fillRect(-20, 120, 580, MASSIF_BASE_Y);
+  }
+  context.restore(); // end silhouette clip
+
+  // Clean outline + sunlit crest: the finishing line that makes it read
+  // as 2D game art rather than a soft painting.
+  context.save();
+  context.lineJoin = 'round';
+  traceMassifSilhouette(context, false);
+  context.strokeStyle = isNight ? 'rgba(4,8,16,0.7)' : 'rgba(70,58,44,0.7)';
+  context.lineWidth = 2;
+  context.stroke();
+  context.beginPath();
+  MASSIF_LEFT.slice(3).concat(CALDERA_FAR_RIM.slice(1, 12)).forEach((p, i) =>
+    i ? context.lineTo(p.x, p.y + 1.4) : context.moveTo(p.x, p.y + 1.4));
+  context.strokeStyle = isNight ? 'rgba(170,190,220,0.18)' : 'rgba(255,250,236,0.75)';
+  context.lineWidth = 1.2;
   context.stroke();
   context.restore();
 }
 
 /* ---- Summit caldera & Lake Pinatubo ----
-   The 1991 eruption collapsed the summit into a wide caldera, now filled
-   by a vivid turquoise lake. Seen in the game's slightly raised 2D view,
-   we show the far inner cliff wall (banded tephra layers) rising behind
-   the water, the lake itself, and a breached notch on the near rim —
-   the outlet through which overflow (and the game's lahars) escapes. ---- */
-function paintPinatuboCaldera(context, isNight) {
-  const cx = CRATER_X, cy = CRATER_Y + 6;
-  const rx = 58, ry = 20;
+   Seen from slightly above: the far inner wall (steep, fluted cliffs
+   with green regrowth on the ledges) rises behind the lake; the near
+   wall is hidden below the near lip. Water fills the bowl to a pale
+   pumice beach and spills out through the breach notch. ---- */
+function paintPinatuboCaldera(context) {
   const rand = mulberry32(3311);
-
-  context.save();
-
-  // Slightly irregular rim outline
-  const rimPts = [];
-  const sides = 30;
-  for (let s = 0; s < sides; s++) {
-    const a = (s / sides) * Math.PI * 2;
-    const m = 1 + (rand() - 0.5) * 0.14;
-    rimPts.push({ x: cx + Math.cos(a) * rx * m, y: cy + Math.sin(a) * ry * m });
-  }
-  const traceRim = () => {
+  const traceBowl = () => {
     context.beginPath();
-    rimPts.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+    CALDERA_FAR_RIM.forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+    for (let i = CALDERA_NEAR_LIP.length - 2; i > 0; i--) {
+      context.lineTo(CALDERA_NEAR_LIP[i].x, CALDERA_NEAR_LIP[i].y);
+    }
     context.closePath();
   };
 
-  // Outer rim shadow cast down the near (lower-right) flank
   context.save();
-  context.translate(3, 4);
-  traceRim();
-  context.fillStyle = isNight ? 'rgba(0,0,0,0.35)' : 'rgba(30,22,16,0.28)';
-  context.fill();
-  context.restore();
-
-  // Inner bowl: far cliff wall (top) grading into shadowed base
-  context.save();
-  traceRim();
+  traceBowl();
   context.clip();
-  const wallGrad = context.createLinearGradient(0, cy - ry, 0, cy + ry);
-  if (isNight) {
-    wallGrad.addColorStop(0, '#4b535e');
-    wallGrad.addColorStop(0.5, '#2a3039');
-    wallGrad.addColorStop(1, '#161a21');
-  } else {
-    wallGrad.addColorStop(0, '#d6cfc1');
-    wallGrad.addColorStop(0.5, '#9d9488');
-    wallGrad.addColorStop(1, '#5a534b');
-  }
-  context.fillStyle = wallGrad;
-  context.fillRect(cx - rx - 4, cy - ry - 4, rx * 2 + 8, ry * 2 + 8);
 
-  // Banded tephra / old lava layers exposed in the far cliff
-  for (let i = 0; i < 4; i++) {
-    const t = 0.12 + i * 0.13;
-    const ly = cy - ry + ry * 2 * t;
-    const spanX = Math.sqrt(Math.max(0, 1 - Math.pow((ly - cy) / ry, 2))) * rx;
-    context.strokeStyle = i % 2 ? (isNight ? 'rgba(0,0,0,0.3)' : 'rgba(60,48,36,0.28)')
-                                : (isNight ? 'rgba(255,255,255,0.06)' : 'rgba(255,250,238,0.35)');
-    context.lineWidth = 1.2;
+  // Far inner wall: bare rock at the crest, vegetated ledges below
+  const wall = context.createLinearGradient(0, 138, 0, 200);
+  wall.addColorStop(0, '#c2b79f');
+  wall.addColorStop(0.22, '#8f9866');
+  wall.addColorStop(0.55, '#5f7a45');
+  wall.addColorStop(1, '#46603a');
+  context.fillStyle = wall;
+  context.fillRect(176, 130, 236, 90);
+
+  // Left inner wall faces away from the sun; right inner wall catches it
+  const side = context.createLinearGradient(184, 0, 403, 0);
+  side.addColorStop(0, 'rgba(22,26,16,0.45)');
+  side.addColorStop(0.35, 'rgba(22,26,16,0.08)');
+  side.addColorStop(0.7, 'rgba(255,246,220,0)');
+  side.addColorStop(1, 'rgba(255,246,220,0.2)');
+  context.fillStyle = side;
+  context.fillRect(176, 130, 236, 90);
+
+  // Fluted cliff streaks running down from the rim
+  for (let x = 188; x < 400; x += 3.2 + rand() * 3) {
+    const top = polylineYAt(CALDERA_FAR_RIM, x) + 1;
+    const len = 6 + rand() * 20;
+    const light = rand() < 0.5;
+    context.strokeStyle = light ? 'rgba(226,216,192,0.55)' : 'rgba(38,44,26,0.4)';
+    context.lineWidth = light ? 1.1 : 1.4;
     context.beginPath();
-    context.moveTo(cx - spanX, ly + 1.5);
-    context.quadraticCurveTo(cx, ly - 1.5, cx + spanX, ly + 1.5);
+    context.moveTo(x, top);
+    context.lineTo(x + (x - CRATER_X) * -0.02, top + len);
     context.stroke();
   }
 
-  // Shadow on the left inner wall (faces away from the sun)
-  const sideShade = context.createLinearGradient(cx - rx, 0, cx - rx * 0.3, 0);
-  sideShade.addColorStop(0, isNight ? 'rgba(0,0,0,0.5)' : 'rgba(30,22,16,0.4)');
-  sideShade.addColorStop(1, 'rgba(0,0,0,0)');
-  context.fillStyle = sideShade;
-  context.fillRect(cx - rx - 4, cy - ry - 4, rx, ry * 2 + 8);
+  // Lake Pinatubo
+  const lx = CRATER_X + 1, ly = 186, lrx = 80, lry = 13.5;
+  context.fillStyle = '#d8ceb6';                 // pumice beach
+  context.beginPath(); context.ellipse(lx, ly, lrx + 3, lry + 2.5, 0, 0, Math.PI * 2); context.fill();
+  const lake = context.createLinearGradient(0, ly - lry, 0, ly + lry);
+  lake.addColorStop(0, '#2b918f');               // far edge mirrors the green wall
+  lake.addColorStop(0.35, '#3fb9b1');
+  lake.addColorStop(1, '#7fdcd1');               // near water shows the sky
+  context.fillStyle = lake;
+  context.beginPath(); context.ellipse(lx, ly, lrx, lry, 0, 0, Math.PI * 2); context.fill();
+  // Shadow of the far wall on the water
+  context.fillStyle = 'rgba(20,70,66,0.35)';
+  context.beginPath(); context.ellipse(lx - 6, ly - lry * 0.55, lrx * 0.86, lry * 0.4, 0, 0, Math.PI * 2); context.fill();
+  // Flat glints
+  context.fillStyle = 'rgba(255,255,255,0.65)';
+  context.beginPath(); context.ellipse(lx - 30, ly + 2, 15, 1.4, 0, 0, Math.PI * 2); context.fill();
+  context.beginPath(); context.ellipse(lx + 22, ly + 6, 10, 1.1, 0, 0, Math.PI * 2); context.fill();
+  context.beginPath(); context.ellipse(lx - 4, ly - 1, 6, 0.9, 0, 0, Math.PI * 2); context.fill();
 
-  // Lake Pinatubo — turquoise from suspended volcanic minerals
-  const lx = cx, ly = cy + 5, lrx = rx * 0.86, lry = ry * 0.6;
-  const lakeGrad = context.createLinearGradient(0, ly - lry, 0, ly + lry);
-  if (isNight) {
-    lakeGrad.addColorStop(0, '#1f4c58');
-    lakeGrad.addColorStop(0.6, '#123541');
-    lakeGrad.addColorStop(1, '#0c242d');
-  } else {
-    lakeGrad.addColorStop(0, '#6fd6d2');
-    lakeGrad.addColorStop(0.55, '#2fa7ae');
-    lakeGrad.addColorStop(1, '#1d7686');
-  }
-  context.fillStyle = lakeGrad;
+  // Outflow through the breach notch
+  const out = context.createLinearGradient(0, 198, 0, 210);
+  out.addColorStop(0, '#5cc7bf');
+  out.addColorStop(1, '#b9b39c');
+  context.fillStyle = out;
   context.beginPath();
-  context.ellipse(lx, ly, lrx, lry, 0, 0, Math.PI * 2);
-  context.fill();
+  context.moveTo(281, 199); context.lineTo(304, 199);
+  context.lineTo(300, 210); context.lineTo(285, 210);
+  context.closePath(); context.fill();
+  context.restore(); // end bowl clip
 
-  // Shoreline of pale pumice beach
-  context.strokeStyle = isNight ? 'rgba(150,165,185,0.22)' : 'rgba(236,230,216,0.6)';
-  context.lineWidth = 1.4;
+  // Near lip crest: sunlit on the left half, duller past the notch
+  context.save();
+  context.lineCap = 'round'; context.lineJoin = 'round';
+  context.lineWidth = 1.8;
+  context.strokeStyle = 'rgba(250,244,228,0.9)';
   context.beginPath();
-  context.ellipse(lx, ly, lrx + 1, lry + 1, 0, 0, Math.PI * 2);
+  CALDERA_NEAR_LIP.slice(0, 7).forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
   context.stroke();
-
-  // Sky reflection / glint
-  context.fillStyle = isNight ? 'rgba(200,215,235,0.22)' : 'rgba(255,255,255,0.45)';
+  context.strokeStyle = 'rgba(214,204,182,0.9)';
   context.beginPath();
-  context.ellipse(lx - lrx * 0.35, ly - lry * 0.3, lrx * 0.3, lry * 0.28, -0.2, 0, Math.PI * 2);
-  context.fill();
-  // Faint ripples
-  context.strokeStyle = isNight ? 'rgba(200,215,235,0.1)' : 'rgba(255,255,255,0.25)';
-  context.lineWidth = 0.9;
-  for (let i = 0; i < 3; i++) {
-    const ry2 = ly - lry * 0.15 + i * lry * 0.35;
-    context.beginPath();
-    context.moveTo(lx - lrx * 0.5 + i * 6, ry2);
-    context.quadraticCurveTo(lx - lrx * 0.2 + i * 4, ry2 - 1.2, lx + lrx * 0.15 + i * 5, ry2);
-    context.stroke();
-  }
-
-  context.restore(); // end rim clip
-
-  // Breach notch on the near rim — the lake's outlet where lahars spill out
-  const nx = cx, ny = cy + ry;
-  context.fillStyle = isNight ? 'rgba(20,45,54,0.9)' : 'rgba(44,132,142,0.85)';
-  context.beginPath();
-  context.moveTo(nx - 9, ny - 4);
-  context.lineTo(nx + 9, ny - 4);
-  context.lineTo(nx + 4, ny + 6);
-  context.lineTo(nx - 3, ny + 6);
-  context.closePath();
-  context.fill();
-  // Wet, pale scour channel running down from the notch
-  const scour = context.createLinearGradient(0, ny, 0, ny + 46);
-  scour.addColorStop(0, isNight ? 'rgba(130,145,160,0.35)' : 'rgba(210,218,214,0.6)');
-  scour.addColorStop(1, 'rgba(210,218,214,0)');
-  context.fillStyle = scour;
-  context.beginPath();
-  context.moveTo(nx - 4, ny + 4);
-  context.lineTo(nx + 4, ny + 4);
-  context.lineTo(nx + 9, ny + 46);
-  context.lineTo(nx - 8, ny + 46);
-  context.closePath();
-  context.fill();
+  CALDERA_NEAR_LIP.slice(7).forEach((p, i) => i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y));
+  context.stroke();
   // Notch walls
-  context.strokeStyle = isNight ? 'rgba(0,0,0,0.5)' : 'rgba(30,22,16,0.45)';
-  context.lineWidth = 1.6;
-  context.beginPath(); context.moveTo(nx + 9, ny - 5); context.lineTo(nx + 5, ny + 8); context.stroke();
-  context.strokeStyle = isNight ? 'rgba(255,255,255,0.1)' : 'rgba(255,250,236,0.6)';
-  context.beginPath(); context.moveTo(nx - 9, ny - 5); context.lineTo(nx - 4, ny + 8); context.stroke();
-
-  // Rim lip: sunlit upper-left edge, shadowed lower-right edge
-  context.lineCap = 'round';
-  context.lineWidth = 2.2;
-  context.strokeStyle = isNight ? 'rgba(170,185,210,0.28)' : 'rgba(255,250,236,0.85)';
-  context.beginPath();
-  for (let s = Math.floor(sides * 0.5); s <= Math.floor(sides * 0.93); s++) {
-    const p = rimPts[s % sides];
-    s === Math.floor(sides * 0.5) ? context.moveTo(p.x, p.y) : context.lineTo(p.x, p.y);
-  }
-  context.stroke();
-  context.lineWidth = 1.6;
-  context.strokeStyle = isNight ? 'rgba(0,0,0,0.45)' : 'rgba(30,22,16,0.42)';
-  context.beginPath();
-  for (let s = Math.floor(sides * 0.02); s <= Math.floor(sides * 0.42); s++) {
-    const p = rimPts[s % sides];
-    s === Math.floor(sides * 0.02) ? context.moveTo(p.x, p.y) : context.lineTo(p.x, p.y);
-  }
-  context.stroke();
-
-  // Small erosion scars around the outer rim (collapse scallops)
-  for (let i = 0; i < 7; i++) {
-    const a = rand() * Math.PI * 2;
-    const px = cx + Math.cos(a) * (rx + 4 + rand() * 10);
-    const py = cy + Math.sin(a) * (ry + 3 + rand() * 6);
-    context.strokeStyle = isNight ? 'rgba(0,0,0,0.3)' : 'rgba(34,26,18,0.25)';
-    context.lineWidth = 1.1;
-    context.beginPath();
-    context.moveTo(px, py);
-    context.lineTo(px + Math.cos(a) * 9 + (rand() - 0.5) * 4, py + Math.sin(a) * 6 + 5 + rand() * 4);
-    context.stroke();
-  }
-
+  context.strokeStyle = 'rgba(60,50,38,0.7)';
+  context.lineWidth = 1.4;
+  context.beginPath(); context.moveTo(299, 209); context.lineTo(303, 202); context.stroke();
   context.restore();
 }
 let mountainCanvasDay = null, mountainCanvasNight = null;
@@ -2866,14 +3040,39 @@ function drawPlants(context) {
     context.save();
     context.translate(p.x, p.y);
     context.rotate(sway);
+    /* Outlined like everything else on the map: one ink rim round the
+       whole crown (stroked thick, then filled over), a shaded lower-right
+       and a lit upper-left. */
+    const INK = '#3a2913';
+    const crown = (blobs) => {
+      context.beginPath();
+      blobs.forEach(([bx, by, br]) => { context.moveTo(bx + br, by); context.arc(bx, by, br, 0, Math.PI * 2); });
+    };
+    const r = p.size;
     if (p.type === 'tree') {
-      context.fillStyle = '#654321'; context.fillRect(-2, 2, 4, 8);
-      context.fillStyle = '#38761d'; context.beginPath(); context.arc(0, -6, p.size, 0, Math.PI * 2); context.fill();
-      context.fillStyle = '#4f9d24'; context.beginPath(); context.arc(-2, -8, p.size * 0.8, 0, Math.PI * 2); context.fill();
+      context.fillStyle = 'rgba(40,30,18,0.28)';
+      context.beginPath(); context.ellipse(1, 10, r * 0.9, 2.4, 0, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#8a5d33'; context.strokeStyle = INK; context.lineWidth = 1.2;
+      context.beginPath(); context.rect(-1.8, 0, 3.6, 10); context.fill(); context.stroke();
+      const blobs = [[-r * 0.45, -5, r * 0.7], [r * 0.45, -5.5, r * 0.68], [0, -6 - r * 0.45, r * 0.75]];
+      crown(blobs); context.lineWidth = 2.4; context.stroke();
+      crown(blobs); context.fillStyle = '#4f9a4f'; context.fill();
+      context.save(); crown(blobs); context.clip();
+      context.fillStyle = '#35753a';
+      context.beginPath(); context.ellipse(r * 0.45, -2, r, r * 0.6, -0.3, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#74bf62';
+      context.beginPath(); context.ellipse(-r * 0.35, -6 - r * 0.6, r * 0.45, r * 0.28, -0.4, 0, Math.PI * 2); context.fill();
+      context.restore();
     } else {
-      context.fillStyle = '#274e13'; context.beginPath(); context.arc(-3, 0, p.size, 0, Math.PI * 2); context.fill();
-      context.beginPath(); context.arc(3, 1, p.size * 0.9, 0, Math.PI * 2); context.fill();
-      context.fillStyle = '#3eb030'; context.beginPath(); context.arc(0, -3, p.size * 0.85, 0, Math.PI * 2); context.fill();
+      const blobs = [[-r * 0.55, 0, r * 0.75], [r * 0.55, 0.5, r * 0.7], [0, -r * 0.4, r * 0.8]];
+      crown(blobs); context.strokeStyle = INK; context.lineWidth = 2.2; context.stroke();
+      crown(blobs); context.fillStyle = '#4c9444'; context.fill();
+      context.save(); crown(blobs); context.clip();
+      context.fillStyle = '#346f33';
+      context.beginPath(); context.ellipse(r * 0.4, r * 0.4, r, r * 0.5, 0, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#7cc466';
+      context.beginPath(); context.ellipse(-r * 0.3, -r * 0.6, r * 0.4, r * 0.22, -0.3, 0, Math.PI * 2); context.fill();
+      context.restore();
     }
     context.restore();
   });
@@ -2929,61 +3128,215 @@ function drawGrassTufts(context) {
 // Birds: lazy loop-de-loop flight before the storm, then a single one-shot
 // panic-flee animation the instant rain begins (state.birdsFleeing +
 // state.birdsFleeStartAmbient are set in the rainPanel click handler).
-const BIRDS = (function buildBirds() {
+/* ---- BIRDS ----
+   Rebuilt. There were four independent sine waves at random heights, every
+   one flapping at the same constant rate, drawn as a bare pair of strokes
+   with no body — so they read as checkmarks drifting sideways rather than
+   as birds.
+
+   Three changes do most of the work:
+     - They fly in FLOCKS with a leader and followers trailing in a loose V,
+       which is what makes a handful of marks read as birds at a glance.
+     - The flap is flap-flap-GLIDE, not a constant sine. Real birds hold
+       their wings out between bursts, and that pause is most of the
+       silhouette you actually recognise.
+     - Depth is consistent: a bird further away is smaller, slower, fainter
+       and flies higher, instead of the three being rolled independently.
+*/
+const BIRD_FLOCKS = (function buildFlocks() {
   const rand = mulberry32(4004);
-  const count = 4;
-  const arr = [];
-  for (let i = 0; i < count; i++) {
-    arr.push({
-      baseY: 90 + rand() * 90,
-      speed: 10 + rand() * 6,
-      ampY: 10 + rand() * 14,
-      freq: 0.4 + rand() * 0.3,
+  const flocks = [];
+  for (let f = 0; f < 3; f++) {
+    // One depth value drives size, speed and haze together.
+    const depth = 0.35 + rand() * 0.65;
+    const dir = rand() < 0.35 ? -1 : 1;            // a flock flying the other way
+    const members = 3 + Math.floor(rand() * 3);
+    const birds = [];
+    for (let i = 0; i < members; i++) {
+      birds.push({
+        // Trailing V: each follower sits behind and slightly off to one side.
+        dx: -i * (13 + rand() * 7),
+        dy: (i === 0 ? 0 : (i % 2 ? 1 : -1) * (5 + rand() * 6)),
+        flapPhase: rand() * Math.PI * 2,
+        wobble: rand() * Math.PI * 2,
+        sizeJitter: 0.85 + rand() * 0.3
+      });
+    }
+    flocks.push({
+      depth, dir, birds,
+      /* Altitude band measured against the HUD, not guessed: the panels
+         occupy y49-197, and the old 62-193 band put every bird behind them
+         so they were never visible at all. 208-300 is clear sky between
+         the HUD and the mountain shoulder. */
+      baseY: 208 + (1 - depth) * 70 + rand() * 22,   // far flocks ride higher
+      speed: (16 + rand() * 10) * depth,
+      ampY: (7 + rand() * 9) * depth,
+      freq: 0.3 + rand() * 0.25,
       phase: rand() * Math.PI * 2,
-      offsetStart: rand() * W,
-      scale: 0.8 + rand() * 0.5
+      offsetStart: rand() * (W + 120),
+      glidePhase: rand() * Math.PI * 2
     });
   }
-  return arr;
+  return flocks;
 })();
 
-function drawBirdShape(context, x, y, scale, wingPhase, alpha) {
+/* Flap-flap-glide. Returns wing lift for a phase: two quick beats, then a
+   held glide. A plain sine flaps forever and looks mechanical. */
+function birdFlap(t) {
+  const cycle = (t % (Math.PI * 2)) / (Math.PI * 2);
+  if (cycle > 0.55) return 0.12;                    // wings held out, gliding
+  return Math.sin(cycle / 0.55 * Math.PI * 2) * 1.0;
+}
+
+function drawBirdShape(context, x, y, scale, wingPhase, alpha, dir, panic) {
+  /* Cattle egrets — the white "tagak" that follow the rice fields and
+     carabaos across Pampanga, so they belong in this sky more than a
+     generic dark tick. Drawn in side view, flying along the direction of
+     travel, in the same ink-outline style as the rest of the scene:
+     white body, tucked S-neck with a buff crown, yellow bill, dark legs
+     trailing behind the tail, and a near + far wing that beat through a
+     flap-flap-glide cycle (see birdFlap). */
   context.save();
   context.globalAlpha = alpha;
   context.translate(x, y);
-  context.scale(scale, scale);
-  const flap = Math.sin(wingPhase) * 6;
-  context.strokeStyle = 'rgba(50,45,40,0.75)';
-  context.lineWidth = 1.6;
+  const s = scale * 1.3;
+  context.scale(s * (dir < 0 ? -1 : 1), s);
+  // + = wings up. The +2.5 holds the glide in a shallow raised V, which is
+  // the silhouette people recognise; a dead-level wing vanishes side-on.
+  const lift = birdFlap(wingPhase) * (panic ? 9.5 : 8) + 2.5;
+  const INK = '#2e2720';
+  context.lineJoin = 'round';
   context.lineCap = 'round';
+
+  // One wing: shoulder → wrist → tip along the leading edge, then a
+  // scalloped trailing edge of flight feathers back to the body. The wrist
+  // lags the tip, so the wing bends like a real one instead of a flat blade.
+  const wing = (ox, oy, len, tipLift, fill) => {
+    const sx = 1.4 + ox, sy = -0.9 + oy;
+    const wx = sx - 0.4, wy = sy - tipLift * 0.6 * len;
+    const tx = sx - 6.2 * len, ty = sy - tipLift * 1.15 * len;
+    const bx = sx - 7.6, by = sy + 0.9;
+    context.beginPath();
+    context.moveTo(sx + 1.4, sy + 0.3);
+    context.quadraticCurveTo(sx + 0.2, wy - 0.6, wx, wy);
+    context.quadraticCurveTo((wx + tx) / 2 + 0.3, (wy + ty) / 2 - 0.4, tx, ty);
+    for (let k = 1; k <= 3; k++) {                       // feather scallops
+      const t = k / 3;
+      const px = tx + (bx - tx) * t, py = ty + (by - ty) * t;
+      context.quadraticCurveTo(px - 0.9, py + 1.2, px, py);
+    }
+    context.closePath();
+    context.fillStyle = fill;
+    context.fill();
+    context.lineWidth = 0.7;
+    context.strokeStyle = INK;
+    context.stroke();
+  };
+
+  // Far wing first, behind the body, a shade darker and a beat behind.
+  wing(-1.2, -0.6, 0.86, lift * 0.8 + 1.2, '#d3d1c4');
+
+  // Legs trailing past the tail
+  context.strokeStyle = '#4a4130';
+  context.lineWidth = 0.75;
   context.beginPath();
-  context.moveTo(-8, 0); context.quadraticCurveTo(-3, -flap, 0, 0);
-  context.quadraticCurveTo(3, -flap, 8, 0);
+  context.moveTo(-3.6, 1.4); context.lineTo(-9.6, 2.3);
+  context.moveTo(-3.4, 1.9); context.lineTo(-9.2, 3.0);
   context.stroke();
+
+  // Body + head as one silhouette: stroke everything thick, then fill on
+  // top, so the outline wraps the whole bird without a seam at the neck.
+  const bodyPath = () => {
+    context.beginPath();
+    context.ellipse(0, 0.4, 5.3, 2.35, -0.06, 0, Math.PI * 2);
+    context.moveTo(3.2, -0.2);
+    context.quadraticCurveTo(4.4, -2.0, 5.6, -2.2);           // tucked neck
+    context.quadraticCurveTo(7.2, -2.2, 7.1, -0.9);
+    context.quadraticCurveTo(6.4, 0.4, 4.2, 1.2);
+    context.closePath();
+  };
+  bodyPath();
+  context.lineWidth = 1.3;
+  context.strokeStyle = INK;
+  context.stroke();
+  // Bill (under the fill so its base tucks into the head)
+  context.fillStyle = '#f2b632';
+  context.beginPath();
+  context.moveTo(6.6, -1.9); context.lineTo(10.2, -1.1); context.lineTo(6.8, -0.8);
+  context.closePath();
+  context.lineWidth = 0.7; context.stroke(); context.fill();
+  bodyPath();
+  context.fillStyle = '#fbfaf3';
+  context.fill();
+  // Soft belly shadow and the buff breeding crown
+  context.fillStyle = 'rgba(120,112,96,0.22)';
+  context.beginPath();
+  context.ellipse(-0.4, 1.5, 4.2, 0.9, -0.05, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = '#efc07e';
+  context.beginPath();
+  context.ellipse(5.9, -1.8, 1.2, 0.55, -0.2, 0, Math.PI * 2);
+  context.fill();
+  // Eye
+  context.fillStyle = INK;
+  context.beginPath(); context.arc(6.3, -1.45, 0.38, 0, Math.PI * 2); context.fill();
+
+  // Near wing last, over the body. On the downstroke we see its underside,
+  // which sits in shadow.
+  wing(0, 0, 1, lift, lift < -1 ? '#ecebe2' : '#ffffff');
+
   context.restore();
 }
 
 function drawBirds(context) {
   if (state.gameOver) return;
+
   if (!state.birdsFleeing) {
-    if (state.raining) return; // safety fallback — flee wasn't triggered, just hide
-    BIRDS.forEach(b => {
-      const x = ((ambientTime * b.speed + b.offsetStart) % (W + 40)) - 20;
-      const y = b.baseY + Math.sin(ambientTime * b.freq + b.phase) * b.ampY;
-      drawBirdShape(context, x, y, b.scale, ambientTime * 6 + b.phase, 0.8);
+    if (state.raining) return;   // safety fallback — flee wasn't triggered
+    BIRD_FLOCKS.forEach((fl) => {
+      const lead = ((ambientTime * fl.speed + fl.offsetStart) % (W + 150)) - 75;
+      const leadX = fl.dir > 0 ? lead : (W - lead);
+      /* A slow bank on top of the bob, so the flock curves across the sky
+         instead of tracking a dead-straight line the whole way over. */
+      const bank = Math.sin(ambientTime * fl.freq * 0.37 + fl.glidePhase) * fl.ampY * 1.5;
+      const leadY = fl.baseY + Math.sin(ambientTime * fl.freq + fl.phase) * fl.ampY + bank;
+      fl.birds.forEach((b) => {
+        // Followers lag, so the V flexes instead of moving as a rigid block.
+        const bob = Math.sin(ambientTime * (fl.freq * 1.6) + b.wobble) * 2.2 * fl.depth;
+        drawBirdShape(context,
+          leadX + b.dx * fl.dir, leadY + b.dy + bob,
+          (0.75 + fl.depth * 0.55) * b.sizeJitter,
+          ambientTime * (4.6 + fl.depth * 1.6) + b.flapPhase,
+          0.62 + fl.depth * 0.38,                    // far flocks haze out
+          fl.dir, false);
+      });
     });
-  } else {
-    const elapsed = ambientTime - state.birdsFleeStartAmbient;
-    if (elapsed > 2.6) return; // long gone — stop drawing entirely
-    BIRDS.forEach((b, i) => {
-      const launchX = ((state.birdsFleeStartAmbient * b.speed + b.offsetStart) % (W + 40)) - 20;
-      const launchY = b.baseY + Math.sin(state.birdsFleeStartAmbient * b.freq + b.phase) * b.ampY;
-      const x = launchX + elapsed * (140 + i * 18);
-      const y = launchY - elapsed * 130;
-      const alpha = Math.max(0, 0.8 - elapsed / 2.2);
-      drawBirdShape(context, x, y, b.scale, ambientTime * 11 + b.phase, alpha);
-    });
+    return;
   }
+
+  /* Panic: the flock breaks apart. Each bird takes its own escape angle and
+     speed and climbs away, rather than the whole group sliding off in
+     parallel as one shape. */
+  const elapsed = ambientTime - state.birdsFleeStartAmbient;
+  if (elapsed > 3) return;
+  BIRD_FLOCKS.forEach((fl, fi) => {
+    const lead = ((state.birdsFleeStartAmbient * fl.speed + fl.offsetStart) % (W + 150)) - 75;
+    const leadX = fl.dir > 0 ? lead : (W - lead);
+    const leadY = fl.baseY + Math.sin(state.birdsFleeStartAmbient * fl.freq + fl.phase) * fl.ampY;
+    fl.birds.forEach((b, i) => {
+      const scatter = (i - (fl.birds.length - 1) / 2) * 0.42 + fi * 0.2;
+      const spd = 150 + i * 26 + fi * 30;
+      // A curved climb: they break outward first, then steepen upward.
+      const x = leadX + b.dx * fl.dir + Math.sin(scatter) * spd * elapsed;
+      const y = leadY + b.dy - (110 * elapsed + 48 * elapsed * elapsed);
+      const alpha = Math.max(0, (0.62 + fl.depth * 0.38) * (1 - elapsed / 2.4));
+      if (alpha <= 0.01) return;
+      drawBirdShape(context, x, y,
+        (0.75 + fl.depth * 0.55) * b.sizeJitter,
+        ambientTime * 15 + b.flapPhase,             // frantic beats, no glide
+        alpha, Math.sin(scatter) >= 0 ? 1 : -1, true);
+    });
+  });
 }
 
 // Bridge traffic (Angeles only): a handful of small cars looping back and
@@ -3051,34 +3404,19 @@ function drawWheel(context, x, y, r) {
   context.fill();
 }
 
-function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
-  context.save();
-  context.globalAlpha = alpha;
-  context.translate(x, y);
-  context.scale(dir, 1); // dir = 1 faces right, dir = -1 faces left
-
-  // Drop shadow beneath tires on the road surface
-  context.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  context.beginPath();
-  context.ellipse(0, 0.5, 17, 2.2, 0, 0, Math.PI * 2);
-  context.fill();
-
-  // Headlight beam projection in night / stormy weather
-  if (state.skyTransition > 0.25 || state.raining) {
-    const beamAlpha = Math.min(0.45, (state.skyTransition * 0.4 + (state.raining ? 0.22 : 0)));
-    const beamGrad = context.createRadialGradient(18, -6, 2, 58, -6, 32);
-    beamGrad.addColorStop(0, `rgba(254, 240, 138, ${beamAlpha})`);
-    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
-    context.fillStyle = beamGrad;
-    context.beginPath();
-    context.moveTo(17, -7);
-    context.lineTo(60, -18);
-    context.lineTo(60, 6);
-    context.lineTo(17, -4);
-    context.closePath();
-    context.fill();
-  }
-
+/* ---- Bridge traffic: cached bodies, live wheels ----
+   Each vehicle's BODY (jeepney, tricycle, van, sedan in its colour) is
+   drawn once into a sprite with the game's ink outline, the same way the
+   houses are. Its wheels are left out of the sprite and drawn live, so
+   they can spin at exactly the rate the vehicle is rolling, and the body
+   can ride its suspension above them. */
+const VEHICLE_SPRITES = new Map();
+let VEH_WHEEL_SLOTS = null;
+function wheelSlot(context, x, y, r) {
+  if (VEH_WHEEL_SLOTS) VEH_WHEEL_SLOTS.push([x, y, r]);   // record, don't draw
+  else drawWheel(context, x, y, r);
+}
+function vehicleBodyArt(context, type, color) {
   if (type === 'jeepney') {
     // ═════════════════════════════════════════════════════════════════════════
     // 🇵🇭 PHILIPPINE JEEPNEY (SIDE VIEW)
@@ -3088,8 +3426,8 @@ function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
     context.fillRect(-17, -4.5, 34, 2);
 
     // Wheels (Front & Rear)
-    drawWheel(context, 10, -3.5, 3.8);
-    drawWheel(context, -11, -3.5, 3.8);
+    wheelSlot(context, 10, -3.5, 3.8);
+    wheelSlot(context, -11, -3.5, 3.8);
 
     // Front Hood & Engine Compartment (Chrome / Stainless Steel)
     context.fillStyle = '#e2e8f0';
@@ -3185,8 +3523,8 @@ function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
     // 🇵🇭 PHILIPPINE MOTORIZED TRICYCLE (SIDE VIEW)
     // ═════════════════════════════════════════════════════════════════════════
     // Wheels (Motorcycle front & rear)
-    drawWheel(context, 10, -3.2, 3.2);
-    drawWheel(context, -6, -3.2, 3.2);
+    wheelSlot(context, 10, -3.2, 3.2);
+    wheelSlot(context, -6, -3.2, 3.2);
 
     // Motorcycle Engine & Exhaust Pipe
     context.fillStyle = '#334155';
@@ -3247,8 +3585,8 @@ function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
     context.fillRect(-15, -4.5, 30, 2);
 
     // Wheels
-    drawWheel(context, 9, -3.5, 3.6);
-    drawWheel(context, -9, -3.5, 3.6);
+    wheelSlot(context, 9, -3.5, 3.6);
+    wheelSlot(context, -9, -3.5, 3.6);
 
     // Aerodynamic Van Body
     context.fillStyle = color;
@@ -3301,8 +3639,8 @@ function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
     context.fillRect(-14, -4.5, 28, 2);
 
     // Wheels
-    drawWheel(context, 8.5, -3.5, 3.5);
-    drawWheel(context, -8.5, -3.5, 3.5);
+    wheelSlot(context, 8.5, -3.5, 3.5);
+    wheelSlot(context, -8.5, -3.5, 3.5);
 
     // 3-Box Sedan Body (Hood, Roof, Trunk)
     context.fillStyle = color;
@@ -3341,6 +3679,102 @@ function drawDetailedVehicle(context, x, y, dir, type, color, alpha) {
     context.fillStyle = '#ef4444';
     context.fillRect(-14.2, -6.8, 1.2, 2);
   }
+
+}
+function getVehicleSprite(type, color) {
+  const key = type + '|' + color;
+  let v = VEHICLE_SPRITES.get(key);
+  if (v) return v;
+  const PF = 3, SW = 64, SH = 34, OX = 32, OY = 26;      // units; origin = road contact
+  const art = document.createElement('canvas'); art.width = SW * PF; art.height = SH * PF;
+  const a = art.getContext('2d');
+  a.scale(PF, PF); a.translate(OX, OY);
+  VEH_WHEEL_SLOTS = [];
+  vehicleBodyArt(a, type, color);
+  const wheels = VEH_WHEEL_SLOTS; VEH_WHEEL_SLOTS = null;
+  const sil = document.createElement('canvas'); sil.width = art.width; sil.height = art.height;
+  const sc = sil.getContext('2d');
+  sc.drawImage(art, 0, 0); sc.globalCompositeOperation = 'source-in';
+  sc.fillStyle = '#3a2913'; sc.fillRect(0, 0, sil.width, sil.height);
+  const spr = document.createElement('canvas'); spr.width = art.width; spr.height = art.height;
+  const o = spr.getContext('2d');
+  for (let k = 0; k < 12; k++) {
+    const an = (k / 12) * Math.PI * 2;
+    o.drawImage(sil, Math.cos(an) * 0.9 * PF, Math.sin(an) * 0.9 * PF);
+  }
+  o.drawImage(art, 0, 0);
+  v = { canvas: spr, wheels, SW, SH, OX, OY };
+  VEHICLE_SPRITES.set(key, v);
+  return v;
+}
+function drawRollingWheel(context, x, y, r, spin) {
+  context.fillStyle = '#0f172a';
+  context.beginPath(); context.arc(x, y, r, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = '#3a2913'; context.lineWidth = 0.9; context.stroke();
+  context.fillStyle = '#cbd5e1';
+  context.beginPath(); context.arc(x, y, r * 0.55, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = '#5b6573'; context.lineWidth = 0.7;
+  for (let k = 0; k < 4; k++) {                               // turning spokes
+    const an = spin + k * Math.PI / 2;
+    context.beginPath(); context.moveTo(x, y);
+    context.lineTo(x + Math.cos(an) * r * 0.55, y + Math.sin(an) * r * 0.55); context.stroke();
+  }
+  context.fillStyle = '#334155';
+  context.beginPath(); context.arc(x, y, r * 0.22, 0, Math.PI * 2); context.fill();
+}
+
+function drawDetailedVehicle(context, x, y, dir, type, color, alpha, travel = 0) {
+  context.save();
+  context.globalAlpha = alpha;
+  context.translate(x, y);
+  context.scale(dir, 1); // dir = 1 faces right, dir = -1 faces left
+
+  // Drop shadow beneath tires on the road surface
+  context.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  context.beginPath();
+  context.ellipse(0, 0.5, 17, 2.2, 0, 0, Math.PI * 2);
+  context.fill();
+
+  // Headlight beam projection in night / stormy weather
+  if (state.skyTransition > 0.25 || state.raining) {
+    const beamAlpha = Math.min(0.45, (state.skyTransition * 0.4 + (state.raining ? 0.22 : 0)));
+    const beamGrad = context.createRadialGradient(18, -6, 2, 58, -6, 32);
+    beamGrad.addColorStop(0, `rgba(254, 240, 138, ${beamAlpha})`);
+    beamGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+    context.fillStyle = beamGrad;
+    context.beginPath();
+    context.moveTo(17, -7); context.lineTo(60, -18); context.lineTo(60, 6); context.lineTo(17, -4);
+    context.closePath(); context.fill();
+  }
+
+  const v = getVehicleSprite(type, color);
+  // A per-vehicle seed from its colour, so no two ride in step
+  const seed = (color.charCodeAt(1) + color.charCodeAt(3)) * 0.37;
+
+  // Exhaust from the tailpipe at the back, drifting up and away
+  for (let k = 0; k < 3; k++) {
+    const age = (ambientTime * 1.7 + k / 3 + seed) % 1;
+    context.fillStyle = `rgba(196,198,200,${0.34 * (1 - age)})`;
+    context.beginPath();
+    context.arc(-18 - age * 12, -3 - age * 5, 1.1 + age * 2.8, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  // Wheels: live, spinning with the distance travelled
+  v.wheels.forEach(([wx, wy, wr]) => drawRollingWheel(context, wx, wy, wr, travel / wr));
+
+  // Body rides its suspension above the wheels: a slow float from the road
+  // plus the engine's idle shake. Jeepneys, being top-heavy, float more.
+  const floatAmp = type === 'jeepney' ? 0.6 : 0.4;
+  const bodyY = Math.sin(travel * 0.11 + seed) * floatAmp
+              + Math.sin(travel * 0.37 + seed * 2) * 0.22
+              + Math.sin(ambientTime * 36 + seed) * 0.12;
+  const pitch = Math.sin(travel * 0.08 + seed) * 0.012;
+  context.save();
+  context.translate(0, bodyY);
+  context.rotate(pitch);
+  context.drawImage(v.canvas, -v.OX, -v.OY, v.SW, v.SH);
+  context.restore();
 
   context.restore();
 }
@@ -3544,11 +3978,21 @@ function drawPerson(context, x, y, p, opts) {
   const { swing = 0, lean = 0, alpha = 1, panic = false, facing = 1, carrying = false, raiseCam = false } = opts || {};
   const s = p.small ? 0.74 : 1;
   const h = 18 * s;
+  /* Same ink as the houses, tools and HUD. Without it these small figures
+     read as smudges against the new, crisper ground. */
+  const INK = '#3a2913';
+  // Trousers vary from person to person (picked from their shirt colour so
+  // it is stable frame to frame), instead of everyone in the same slacks.
+  const PANTS = ['#3f3d56', '#2f4a6d', '#5b4636', '#374151', '#4a5a3a'];
+  const pants = p.pants || PANTS[((p.shirt || '').charCodeAt(2) || 0) % PANTS.length];
   context.save();
   context.globalAlpha = alpha;
+  // Contact shadow shrinks as they lift on each step, so feet read as
+  // touching the ground rather than the sprite gliding over it.
+  const lift = Math.abs(Math.sin(swing)) * (panic ? 2.4 : 1.4);
+  context.fillStyle = 'rgba(28,36,20,0.3)';
+  context.beginPath(); context.ellipse(x + 1, y + 1 + lift, (5.2 - lift * 0.6) * s, (2.1 - lift * 0.25) * s, 0, 0, Math.PI * 2); context.fill();
   context.translate(x, y);
-  context.fillStyle = 'rgba(28,36,20,0.26)';
-  context.beginPath(); context.ellipse(1, 1, 5.2 * s, 2.1 * s, 0, 0, Math.PI * 2); context.fill();
   context.scale(facing, 1);
   context.rotate(lean);
 
@@ -3559,23 +4003,32 @@ function drawPerson(context, x, y, p, opts) {
      foot plants fixes that, and it is only one extra point per leg. */
   const legSwing = Math.sin(swing) * (panic ? 4.2 : 2.6) * s;
   const hipY = -h * 0.42;
-  context.strokeStyle = '#3f3d56'; context.lineWidth = 2.2 * s; context.lineCap = 'round';
+  context.lineCap = 'round';
   context.lineJoin = 'round';
-  const drawLeg = (phase) => {
+  const drawLeg = (phase, pass) => {
     const sw = Math.sin(swing + phase) * (panic ? 4.2 : 2.6) * s;
     // Knee flexes most when the leg is swinging through, least when planted.
     const lift = Math.max(0, Math.cos(swing + phase)) * (panic ? 2.6 : 1.5) * s;
     const kneeX = sw * 0.55;
     const kneeY = hipY * 0.45 - lift * 0.25;
     const footY = -Math.max(0, lift) * 0.9;
+    if (pass === 'shoe') {
+      context.fillStyle = '#2a211a';
+      context.beginPath(); context.ellipse(sw + 0.9 * s, footY - 0.2, 1.7 * s, 1.05 * s, 0, 0, Math.PI * 2); context.fill();
+      return;
+    }
+    context.strokeStyle = pass === 'ink' ? INK : pants;
+    context.lineWidth = pass === 'ink' ? 2.2 * s + 1.5 : 2.2 * s;
     context.beginPath();
     context.moveTo(0, hipY);
     context.lineTo(kneeX, kneeY);
     context.lineTo(sw, footY);
     context.stroke();
   };
-  drawLeg(0);
-  drawLeg(Math.PI);
+  // far leg first, both inked first so the outline wraps the pair
+  drawLeg(Math.PI, 'ink'); drawLeg(0, 'ink');
+  drawLeg(Math.PI, 'fill'); drawLeg(Math.PI, 'shoe');
+  drawLeg(0, 'fill'); drawLeg(0, 'shoe');
 
   // Backpack, worn on the back — drawn before the body so it sits behind
   if (p.act === 'school') {
@@ -3584,19 +4037,16 @@ function drawPerson(context, x, y, p, opts) {
     context.roundRect ? context.roundRect(-5.6 * s, -h * 0.76, 3.4 * s, h * 0.34, 1.4)
                       : context.rect(-5.6 * s, -h * 0.76, 3.4 * s, h * 0.34);
     context.fill();
+    context.strokeStyle = INK; context.lineWidth = 0.9; context.stroke();
   }
 
-  context.fillStyle = p.shirt || '#e0e7ff';
-  context.beginPath();
-  context.moveTo(-3.1 * s, -h * 0.42);
-  context.lineTo(3.1 * s, -h * 0.42);
-  context.lineTo(2.6 * s, -h * 0.78);
-  context.lineTo(-2.6 * s, -h * 0.78);
-  context.closePath(); context.fill();
-  context.strokeStyle = 'rgba(40,35,30,0.28)'; context.lineWidth = 0.8; context.stroke();
-
+  /* Arms are drawn BEFORE the shirt: seen side-on they hang mostly behind
+     the torso, with just the hands swinging clear of it. Drawn on top, the
+     inked arms covered the shirt and everyone looked skin-coloured. */
   const armSwing = Math.sin(swing + Math.PI) * (panic ? 4 : 2.4) * s;
-  context.strokeStyle = p.skin || '#c68642'; context.lineWidth = 1.9 * s;
+  for (const armPass of ['ink', 'skin']) {
+  context.strokeStyle = armPass === 'ink' ? INK : (p.skin || '#c68642');
+  context.lineWidth = armPass === 'ink' ? 1.9 * s + 1.1 : 1.9 * s;
   context.beginPath();
   if (panic) {
     context.moveTo(-2.6 * s, -h * 0.72); context.lineTo(-5 * s, -h * 1.02);
@@ -3623,6 +4073,22 @@ function drawPerson(context, x, y, p, opts) {
     context.lineTo(2.2 * s + armB, -h * 0.44);
   }
   context.stroke();
+  }
+
+  context.fillStyle = p.shirt || '#e0e7ff';
+  context.beginPath();
+  context.moveTo(-3.1 * s, -h * 0.42);
+  context.lineTo(3.1 * s, -h * 0.42);
+  context.lineTo(2.6 * s, -h * 0.78);
+  context.lineTo(-2.6 * s, -h * 0.78);
+  context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 1; context.stroke();
+  // a touch of shade on the back half of the shirt
+  context.fillStyle = 'rgba(0,0,0,0.12)';
+  context.beginPath();
+  context.moveTo(-3.1 * s, -h * 0.42); context.lineTo(-0.6 * s, -h * 0.42);
+  context.lineTo(-0.6 * s, -h * 0.78); context.lineTo(-2.6 * s, -h * 0.78);
+  context.closePath(); context.fill();
 
   /* The head counter-bobs against the body's rise and fall. Walking people
      keep their heads remarkably level — letting it ride the full bob made
@@ -3639,6 +4105,12 @@ function drawPerson(context, x, y, p, opts) {
   context.beginPath(); context.arc(0, -h * 0.9, 3.1 * s, 0, Math.PI * 2); context.fill();
   context.fillStyle = '#2b1f14';
   context.beginPath(); context.arc(0, -h * 0.95, 3.1 * s, Math.PI * 1.05, Math.PI * 1.95); context.fill();
+  // hair falls a little to the back of the head
+  context.beginPath(); context.arc(-1.1 * s, -h * 0.9, 2.2 * s, Math.PI * 0.55, Math.PI * 1.3); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.95;
+  context.beginPath(); context.arc(0, -h * 0.9, 3.1 * s, 0, Math.PI * 2); context.stroke();
+  context.fillStyle = INK;                                  // eye, facing forward
+  context.beginPath(); context.arc(1.5 * s, -h * 0.9, 0.42 * s, 0, Math.PI * 2); context.fill();
   context.restore();
   // Lace veil for churchgoers
   if (p.veil) {
@@ -3650,7 +4122,7 @@ function drawPerson(context, x, y, p, opts) {
     context.closePath(); context.fill();
   }
   if (p.hat) {
-    context.fillStyle = '#d6b46a'; context.strokeStyle = '#8a6d30'; context.lineWidth = 0.8;
+    context.fillStyle = '#d6b46a'; context.strokeStyle = INK; context.lineWidth = 0.9;
     context.beginPath();
     context.ellipse(0, -h * 1.02, 5.4 * s, 2.1 * s, 0, 0, Math.PI * 2);
     context.fill(); context.stroke();
@@ -3722,81 +4194,156 @@ function drawVillagerProp(context, x, y, p, j, swing, alpha) {
 }
 
 // Motorcycle-and-sidecar, seen from the side, with a driver and a fare.
+/* Rebuilt in the game's ink-outline style, and animated as a vehicle
+   rather than a sprite sliding along:
+     - the WHEELS stay on the road and spin with the distance travelled
+       (spokes turn at exactly the rate the tyre rolls);
+     - the BODY rides its suspension above them — a slow sway plus a
+       quicker jiggle from the road, so it never bobs as one rigid block;
+     - the driver's hands are on the handlebars, the fare rocks slightly
+       out of step with the body, and exhaust puffs trail behind.
+   `travel` is distance-based, so a slower trike's wheels turn slower. */
 function drawTricycle(context, x, y, dir, travel, alpha, body, rot = 0) {
+  const INK = '#3a2913';
+  const dist = travel / 0.06;                   // callers pass distance * 0.06
   context.save();
   context.globalAlpha = alpha;
   context.translate(x, y);
   if (rot) context.rotate(rot);
   context.scale(dir, 1);
-  const bob = Math.sin(travel * 14) * 0.4;
-  context.translate(0, bob);
 
-  context.fillStyle = 'rgba(28,36,20,0.28)';
-  context.beginPath(); context.ellipse(0, 4, 17, 3.4, 0, 0, Math.PI * 2); context.fill();
+  // Suspension: body motion is separate from the wheels
+  const sway = Math.sin(dist * 0.09) * 0.55 + Math.sin(dist * 0.31 + 1.3) * 0.35;
+  const idle = Math.sin(ambientTime * 38) * 0.18;           // engine vibration
+  const bodyY = sway + idle;
+  const tilt = Math.sin(dist * 0.07) * 0.018;
 
-  // Sidecar body with its roof
-  context.fillStyle = body || '#ef4444';
-  context.beginPath();
-  context.moveTo(-15, 2); context.lineTo(-15, -8); context.lineTo(-2, -8); context.lineTo(-2, 2);
-  context.closePath(); context.fill();
-  context.strokeStyle = 'rgba(30,25,20,0.4)'; context.lineWidth = 1; context.stroke();
-  context.fillStyle = 'rgba(255,255,255,0.35)';
-  context.fillRect(-13.5, -6.5, 4, 3.5);
-  // Roof
-  context.fillStyle = '#e2e8f0';
-  context.fillRect(-16.5, -15, 15.5, 2.2);
-  context.strokeStyle = '#94a3b8'; context.lineWidth = 1.2;
-  context.beginPath();
-  context.moveTo(-15, -12.8); context.lineTo(-15, -8);
-  context.moveTo(-2.5, -12.8); context.lineTo(-2.5, -8);
-  context.stroke();
-  // Passenger inside the sidecar
-  context.fillStyle = '#c68642';
-  context.beginPath(); context.arc(-8.5, -11, 2.4, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#2b1f14';
-  context.beginPath(); context.arc(-8.5, -11.5, 2.4, Math.PI * 1.05, Math.PI * 1.95); context.fill();
-  context.fillStyle = '#f8fafc';
-  context.fillRect(-10.6, -9, 4.2, 3);
+  // Road shadow
+  context.fillStyle = 'rgba(28,36,20,0.3)';
+  context.beginPath(); context.ellipse(-1, 4.6, 18, 3.2, 0, 0, Math.PI * 2); context.fill();
 
-  // Motorcycle frame
-  context.strokeStyle = '#334155'; context.lineWidth = 2.4; context.lineCap = 'round';
-  context.beginPath();
-  context.moveTo(2, 0); context.lineTo(7, -5); context.lineTo(12, -6);
-  context.stroke();
-  context.fillStyle = '#475569';
-  context.fillRect(3, -7, 7, 4);
-  // Driver leaning forward
-  context.fillStyle = '#1e3a8a';
-  context.beginPath();
-  context.moveTo(4, -7); context.lineTo(9, -7); context.lineTo(8, -13); context.lineTo(4.5, -13);
-  context.closePath(); context.fill();
-  context.fillStyle = '#c68642';
-  context.beginPath(); context.arc(7, -15, 2.5, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#dc2626';   // helmet
-  context.beginPath(); context.arc(7, -15.4, 2.7, Math.PI, 0); context.fill();
-  context.strokeStyle = '#c68642'; context.lineWidth = 1.4; context.lineCap = 'round';
-  context.beginPath(); context.moveTo(8, -12); context.lineTo(11.6, -7.4); context.stroke();
+  // Exhaust: puffs leave the muffler at the back and drift up and away
+  for (let k = 0; k < 3; k++) {
+    const age = ((ambientTime * 1.9 + k / 3 + (body || '').length * 0.13) % 1);
+    const px = -2 - age * 11, py = 0.5 - age * 5 + bodyY;
+    context.fillStyle = `rgba(200,200,196,${0.38 * (1 - age)})`;
+    context.beginPath(); context.arc(px, py, 1 + age * 2.6, 0, Math.PI * 2); context.fill();
+  }
 
-  // Wheels. Kept as dark tyres with a small hub and two faint spokes:
-  // a bright hub with three full-width spokes read as a white asterisk at
-  // this size rather than a wheel.
-  const spin = travel * 9;
-  [[-11, 2.2, 3.4], [10.5, 0.5, 3.6], [1.5, 1.4, 3.2]].forEach(([wx, wy, wr]) => {
-    context.fillStyle = '#1f2937';
+  // Wheels (drawn first; the body and fenders sit over their tops)
+  const wheel = (wx, wy, wr) => {
+    const spin = dist / wr;
+    context.fillStyle = '#1f2630';
     context.beginPath(); context.arc(wx, wy, wr, 0, Math.PI * 2); context.fill();
-    context.strokeStyle = '#4b5563'; context.lineWidth = 0.8;
-    context.beginPath(); context.arc(wx, wy, wr - 0.6, 0, Math.PI * 2); context.stroke();
-    context.strokeStyle = 'rgba(203,213,225,0.45)'; context.lineWidth = 0.6;
-    for (let k = 0; k < 2; k++) {
-      const a = spin + k * (Math.PI / 2);
+    context.strokeStyle = INK; context.lineWidth = 1; context.stroke();
+    context.fillStyle = '#9aa6b2';
+    context.beginPath(); context.arc(wx, wy, wr * 0.55, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = '#3d4652'; context.lineWidth = 0.8;
+    for (let k = 0; k < 3; k++) {                  // spokes, visibly turning
+      const an = spin + k * (Math.PI * 2 / 3);
       context.beginPath();
-      context.moveTo(wx - Math.cos(a) * wr * 0.7, wy - Math.sin(a) * wr * 0.7);
-      context.lineTo(wx + Math.cos(a) * wr * 0.7, wy + Math.sin(a) * wr * 0.7);
+      context.moveTo(wx, wy);
+      context.lineTo(wx + Math.cos(an) * wr * 0.55, wy + Math.sin(an) * wr * 0.55);
       context.stroke();
     }
-    context.fillStyle = '#9ca3af';
-    context.beginPath(); context.arc(wx, wy, wr * 0.22, 0, Math.PI * 2); context.fill();
-  });
+    context.fillStyle = '#e5e9ee';
+    context.beginPath(); context.arc(wx, wy, wr * 0.18, 0, Math.PI * 2); context.fill();
+  };
+  wheel(-11, 1.8, 3.4);   // sidecar wheel
+  wheel(1.5, 1.4, 3.2);   // motorcycle rear
+  wheel(11, 1.2, 3.5);    // motorcycle front
+
+  context.save();
+  context.translate(0, bodyY);
+  context.rotate(tilt);
+  context.lineJoin = 'round'; context.lineCap = 'round';
+
+  // Sidecar: rounded tub, stripe decal, window, roof with fringe
+  const tub = () => {
+    context.beginPath();
+    context.moveTo(-16, -1); context.quadraticCurveTo(-16.5, -8.5, -13, -9);
+    context.lineTo(-2.5, -9); context.lineTo(-1.5, -1);
+    context.quadraticCurveTo(-8.5, 1.4, -16, -1); context.closePath();
+  };
+  tub(); context.fillStyle = body || '#ef4444'; context.fill();
+  context.fillStyle = 'rgba(0,0,0,0.18)';
+  context.fillRect(-16, -3.2, 14.5, 2.4);
+  context.fillStyle = '#fff4d6';                 // hand-painted stripe
+  context.fillRect(-15.2, -5.4, 12.6, 1.1);
+  tub(); context.strokeStyle = INK; context.lineWidth = 1.2; context.stroke();
+  context.fillStyle = '#bfe3f2';                 // side window
+  context.beginPath(); context.moveTo(-13.4, -8.4); context.lineTo(-9.2, -8.4); context.lineTo(-9.2, -5.9); context.lineTo(-14, -5.9); context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.8; context.stroke();
+  // passenger, rocking a beat behind the body
+  const rock = Math.sin(dist * 0.09 - 0.9) * 0.45;
+  context.save(); context.translate(-6.5, rock);
+  context.fillStyle = '#f8fafc'; context.fillRect(-2.2, -8.8, 4.4, 3);
+  context.strokeStyle = INK; context.lineWidth = 0.8; context.strokeRect(-2.2, -8.8, 4.4, 3);
+  context.fillStyle = '#c68642'; context.beginPath(); context.arc(0, -11, 2.3, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#2b1f14'; context.beginPath(); context.arc(0, -11.4, 2.3, Math.PI * 1.05, Math.PI * 1.95); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.8; context.beginPath(); context.arc(0, -11, 2.3, 0, Math.PI * 2); context.stroke();
+  context.restore();
+  // roof posts and roof, with a fringe along the edge
+  context.strokeStyle = INK; context.lineWidth = 1.2;
+  context.beginPath(); context.moveTo(-15, -9); context.lineTo(-15.5, -14.2); context.moveTo(-3, -9); context.lineTo(-2.4, -14.2); context.stroke();
+  context.fillStyle = '#e8edf2';
+  context.beginPath(); context.moveTo(-17.4, -14.2); context.lineTo(-0.8, -14.2); context.lineTo(-1.6, -16.2); context.lineTo(-16.6, -16.2); context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 1; context.stroke();
+  context.strokeStyle = body || '#ef4444'; context.lineWidth = 1.2;
+  context.setLineDash([1.2, 1.1]);
+  context.beginPath(); context.moveTo(-17, -13.4); context.lineTo(-1.2, -13.4); context.stroke();
+  context.setLineDash([]);
+
+  // Motorcycle: frame, tank, seat, fenders, headlight, muffler
+  context.strokeStyle = INK; context.lineWidth = 3.2;
+  context.beginPath(); context.moveTo(1.5, 0.6); context.lineTo(6.5, -5); context.lineTo(11.5, 0); context.stroke();
+  context.strokeStyle = '#4a5563'; context.lineWidth = 1.8;
+  context.beginPath(); context.moveTo(1.5, 0.6); context.lineTo(6.5, -5); context.lineTo(11.5, 0); context.stroke();
+  context.fillStyle = body || '#ef4444';                    // tank in the livery colour
+  context.beginPath(); context.ellipse(6.6, -5.6, 3, 1.6, -0.15, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.9; context.stroke();
+  context.fillStyle = '#2b2f36'; context.fillRect(1.2, -6.4, 3.6, 1.4);   // seat
+  context.fillStyle = '#cfd6de';                                             // front fender
+  context.beginPath(); context.arc(11, 1.2, 4.2, Math.PI * 1.1, Math.PI * 1.75); context.lineTo(11, 1.2); context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.9; context.stroke();
+  context.fillStyle = '#9aa6b2'; context.strokeStyle = INK; context.lineWidth = 0.8;   // muffler
+  context.beginPath(); context.rect(-3.2, -0.4, 5, 1.5); context.fill(); context.stroke();
+  context.fillStyle = '#fff1a8';                                             // headlight
+  context.beginPath(); context.arc(13.4, -4.8, 1.3, 0, Math.PI * 2); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.8; context.stroke();
+  if (state.raining || state.skyTransition > 0.25) {
+    const g = context.createRadialGradient(14, -4.8, 0, 14, -4.8, 16);
+    g.addColorStop(0, 'rgba(255,241,168,0.5)'); g.addColorStop(1, 'rgba(255,241,168,0)');
+    context.fillStyle = g;
+    context.beginPath(); context.moveTo(13.4, -5.8); context.lineTo(30, -10); context.lineTo(30, 1); context.lineTo(13.4, -3.8); context.fill();
+  }
+  // handlebar
+  context.strokeStyle = INK; context.lineWidth = 1.3;
+  context.beginPath(); context.moveTo(10.2, -4.6); context.lineTo(9.2, -8.6); context.lineTo(11, -9.2); context.stroke();
+
+  // Driver: helmet, shirt, arm reaching to the bars, leg on the peg
+  const lean = Math.sin(dist * 0.09 + 0.6) * 0.3;
+  context.save(); context.translate(lean * 0.5, 0);
+  context.strokeStyle = INK; context.lineWidth = 2.6;
+  context.beginPath(); context.moveTo(3.2, -6.4); context.lineTo(6.2, -3.2); context.lineTo(5.6, -0.6); context.stroke();
+  context.strokeStyle = '#3f3d56'; context.lineWidth = 1.6; context.stroke();
+  context.fillStyle = '#1e3a8a';
+  context.beginPath(); context.moveTo(1.8, -6.6); context.lineTo(5.2, -6.6); context.lineTo(6.6, -12.6); context.lineTo(3.2, -12.8); context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.9; context.stroke();
+  context.strokeStyle = INK; context.lineWidth = 2.3;                       // arm to the handlebar
+  context.beginPath(); context.moveTo(5.6, -11.6); context.lineTo(8.4, -9.6); context.lineTo(10.4, -8.9); context.stroke();
+  context.strokeStyle = '#c68642'; context.lineWidth = 1.3; context.stroke();
+  context.fillStyle = '#c68642';
+  context.beginPath(); context.arc(5.4, -14.8, 2.4, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#dc2626';                                           // helmet
+  context.beginPath(); context.arc(5.2, -15.2, 2.7, Math.PI * 0.95, Math.PI * 2.05); context.closePath(); context.fill();
+  context.strokeStyle = INK; context.lineWidth = 0.9;
+  context.beginPath(); context.arc(5.3, -15, 2.7, 0, Math.PI * 2); context.stroke();
+  context.fillStyle = 'rgba(191,227,242,0.9)';                              // visor
+  context.fillRect(6.2, -15.4, 1.8, 1.1);
+  context.restore();
+
+  context.restore();   // body
   context.restore();
 }
 
@@ -4001,7 +4548,7 @@ function drawCars(context) {
       const travel = (ambientTime * c.speed + c.offsetStart) % roadLen;
       const x = c.dir === 1 ? (leftX + travel) : (rightX - travel);
       const y = b.y + c.laneYOffset;
-      drawDetailedVehicle(context, x, y, c.dir, c.type, c.color, 0.98);
+      drawDetailedVehicle(context, x, y, c.dir, c.type, c.color, 0.98, ambientTime * c.speed + c.offsetStart);
     });
   } else {
     const elapsed = ambientTime - state.carsFleeStartAmbient;
@@ -4012,7 +4559,7 @@ function drawCars(context) {
       const x = launchX + c.dir * elapsed * (c.speed * 3.6);
       const y = b.y + c.laneYOffset;
       const alpha = Math.max(0, 0.98 - elapsed / 2.0);
-      drawDetailedVehicle(context, x, y, c.dir, c.type, c.color, alpha);
+      drawDetailedVehicle(context, x, y, c.dir, c.type, c.color, alpha, state.carsFleeStartAmbient * c.speed + c.offsetStart + elapsed * c.speed * 3.6);
     });
   }
 }
@@ -4047,6 +4594,8 @@ function showTownSelection() {
 
   document.querySelectorAll('.town-card').forEach(c => {
     c.classList.toggle('selected', c.dataset.town === gameSettings.town);
+    const sb = c.querySelector('.select-town-btn');
+    if (sb) sb.textContent = c.dataset.town === gameSettings.town ? 'Selected' : 'Select';
   });
 }
 
@@ -4244,6 +4793,67 @@ function townLoseThreshold(totalStructures) {
   return Math.max(3, Math.ceil(totalStructures * 0.26));
 }
 
+/* ---- Landmark badges in the Protect Village panel ----
+   Each landmark gets its own small picture instead of an anonymous
+   diamond or square, so a visitor can tell WHICH building is in trouble
+   (and match it to the one on the map) without reading a label. Same ink
+   outline kit as the tools and HUD. The badge's bottom strip is that
+   landmark's live health, in the identity colour its health bar uses in
+   the scene. */
+const LANDMARK_ICON = {
+  church: "<path d='M3.5 21V10.5L9 6l5.5 4.5V21z' fill='#efe3c8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M14.5 21V6.2h5V21z' fill='#d9c9a6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M14.5 6.2 17 2.6l2.5 3.6z' fill='#c0564a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M7 21v-5a2 2 0 0 1 4 0v5z' fill='#6b4a2c' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='9' cy='11' r='1.3' fill='#6b4a2c'/><path d='M16.2 9.2h1.6v2.4h-1.6z' fill='#6b4a2c'/><path d='M2 21h20' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  school: "<path d='M3 21V11.5h14V21z' fill='#f4e6c6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M2 11.8 10 7.4l8 4.4z' fill='#c0564a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M5.6 14h2.6v2.4H5.6zM11.8 14h2.6v2.4h-2.6z' fill='#8fc0dc' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M8.6 21v-3.4h2.8V21z' fill='#6b4a2c' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M20.4 21V3' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M20.4 3.4h-4.2v1.6h4.2z' fill='#3b6fc4'/><path d='M20.4 5h-4.2v1.6h4.2z' fill='#d23a2a'/><path d='M20.4 3.4h-4.2v3.2h4.2' fill='none' stroke='#3a2913' stroke-width='1.1'/><path d='M1.6 21h21' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  university: "<path d='M3 21v-9h18v9z' fill='#f1e2bf' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M6 12v9M10 12v9M14 12v9M18 12v9' stroke='#3a2913' stroke-width='1.2'/><path d='M2 12.2 12 8l10 4.2z' fill='#d9c9a6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 1.8 18.4 4.4 12 7 5.6 4.4z' fill='#2e3a55' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M8.2 5.5v2.2c2.4 1.2 5.2 1.2 7.6 0V5.5' fill='#2e3a55' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M18.4 4.4v3.2' stroke='#ffc94d' stroke-width='1.4' stroke-linecap='round'/><path d='M1.6 21h20.8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  monument: "<path d='M6.4 21v-4h11.2v4z' fill='#cfc6b4' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M8 17v-3.2h8V17z' fill='#e2dacb' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='4' r='2' fill='#b07a3a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M9.4 13.8 10 7.8c.2-1.2 1-1.8 2-1.8s1.8.6 2 1.8l.6 6z' fill='#b07a3a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M14 8.4l2.6 1.8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M1.6 21h20.8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  robot: "<path d='M12 2.6v2.6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='2.4' r='1.2' fill='#de4430' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M5 5.4h14v10.2H5z' fill='#8fb8e6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M7.4 8.2h9.2v4H7.4z' fill='#243a57' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='10' cy='10.2' r='1' fill='#7ff0ff'/><circle cx='14' cy='10.2' r='1' fill='#7ff0ff'/><path d='M3 8.4v4.4M21 8.4v4.4' stroke='#3a2913' stroke-width='2.2' stroke-linecap='round'/><path d='M7.6 15.6v3.4h8.8v-3.4' fill='#6c97c9' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M5 21h14' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  bridge: "<path d='M1.8 9.6h20.4v2.8H1.8z' fill='#d8d1c3' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M4 12.4c0 4 3.6 6 8 6s8-2 8-6' fill='none' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M7.4 12.4v4.4M12 12.4v6M16.6 12.4v4.4' stroke='#3a2913' stroke-width='1.3'/><path d='M1.8 20.6c2 0 2-1.3 4-1.3s2 1.3 4 1.3 2-1.3 4-1.3 2 1.3 4 1.3 2-1.3 4.4-1.3' fill='none' stroke='#4d86c4' stroke-width='1.8' stroke-linecap='round'/><path d='M1.8 7.2h20.4' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  hall: "<path d='M2.6 21v-8.8h18.8V21z' fill='#f4ead4' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M9 12.2V7.4h6v4.8' fill='#e6d8b8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='9.6' r='1.5' fill='#fff' stroke='#3a2913' stroke-width='1.1'/><path d='M8.4 7.4 12 4.8l3.6 2.6z' fill='#c0564a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 4.8V1.6' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 1.8h3.4v1.8H12' fill='#3b6fc4' stroke='#3a2913' stroke-width='1'/><path d='M5.2 14.6v4.6M8.4 14.6v4.6M15.6 14.6v4.6M18.8 14.6v4.6' stroke='#3a2913' stroke-width='1.3'/><path d='M10.6 21v-4h2.8v4z' fill='#6b4a2c' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M1.6 21h20.8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  market: "<path d='M4 21v-9h16v9z' fill='#f1e2bf' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M2.6 12.4 4.4 6h15.2l1.8 6.4z' fill='#fff' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M6.4 6 5.6 12.4M9.8 6l-.4 6.4M14.2 6l.4 6.4M17.6 6l.8 6.4' stroke='#de4430' stroke-width='2.2'/><path d='M2.6 12.4 4.4 6h15.2l1.8 6.4z' fill='none' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M6 16.4h12v4.6H6z' fill='#b98a54' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='9' cy='16' r='1.4' fill='#e05a3c' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='15.8' r='1.4' fill='#9dc45c' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='15' cy='16' r='1.4' fill='#ffc94d' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>",
+  salakot: "<path d='M12 3.6 2.4 15.4c3.2 2 15.2 2 19.2 0z' fill='#d9b36a' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 3.6 21.6 15.4c-2.2 1.2-5.6 1.7-9.6 1.7z' fill='#b98f48'/><path d='M12 3.6 2.4 15.4c3.2 2 15.2 2 19.2 0z' fill='none' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 3.6 7.2 16.6M12 3.6l4.8 13M12 3.6v13.4M12 3.6 4.4 15.8M12 3.6l7.6 12.2' stroke='#7a5a28' stroke-width='.9'/><circle cx='12' cy='3.6' r='1.5' fill='#8a5d33' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M5.2 19.6c3.4 1 10.2 1 13.6 0' fill='none' stroke='#3a2913' stroke-width='1.4' stroke-linecap='round'/>",
+  museum: "<path d='M2.4 9.4 12 3.2l9.6 6.2z' fill='#e6d8b8' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='7.2' r='1' fill='#3a2913'/><path d='M3.2 9.4h17.6v2H3.2z' fill='#f4ead4' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M5 11.4h2v7.2H5zM9 11.4h2v7.2H9zM13 11.4h2v7.2h-2zM17 11.4h2v7.2h-2z' fill='#fbf6ea' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/><path d='M2.6 18.6h18.8v2.4H2.6z' fill='#d9ccb1' stroke='#3a2913' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>"
+};
+// Town props are identified by their label.
+function propIconKey(label) {
+  const l = (label || '').toLowerCase();
+  if (l.includes('church')) return 'church';
+  if (l.includes('university') || l.includes('college')) return 'university';
+  if (l.includes('school')) return 'school';
+  if (l.includes('museum')) return 'museum';
+  if (l.includes('hall') || l.includes('capitol')) return 'hall';
+  if (l.includes('market')) return 'market';
+  if (l.includes('salakot')) return 'salakot';
+  if (l.includes('bridge')) return 'bridge';
+  if (l.includes('monument') || l.includes('statue')) return 'monument';
+  return 'hall';
+}
+function landmarkBadge(iconKey, title, isLost, color, ref) {
+  const el = document.createElement('div');
+  el.className = 'lm-badge' + (isLost ? ' lost' : '');
+  el.title = title;
+  el.setAttribute('aria-label', title + (isLost ? ' (lost)' : ''));
+  el.style.setProperty('--lm-color', color);
+  el.innerHTML = `<svg class="lm-ico" viewBox="0 0 24 24" aria-hidden="true">${LANDMARK_ICON[iconKey] || LANDMARK_ICON.hall}</svg><span class="lm-hp"></span>`;
+  el._lmRef = ref;
+  setBadgeHP(el);
+  return el;
+}
+function setBadgeHP(el) {
+  const r = el._lmRef;
+  if (!r) return;
+  const hp = r.lost ? 0 : Math.max(0, Math.min(1, (r.hp ?? 100) / (r.maxHp || 100)));
+  if (el._hp === hp) return;               // only touch the DOM when it changes
+  el._hp = hp;
+  el.style.setProperty('--hp', hp.toFixed(3));
+  el.classList.toggle('hurt', !r.lost && hp <= 0.45);
+}
+// Called from the render loop: keeps each badge's health strip live.
+let badgeTick = 0;
+function tickLandmarkBadges() {
+  const row = document.querySelector('#houseDots .lm-row');
+  if (!row) return;
+  for (const el of row.children) setBadgeHP(el);
+}
+
 function refreshStatusDots() {
   const w = document.getElementById('houseDots'); w.innerHTML = '';
   // Landmark dots live in their own row; the house integrity bar is added
@@ -4257,13 +4867,9 @@ function refreshStatusDots() {
 
   // Adds a dot and flags it as "just lost" if this is the first refresh in
   // which that particular structure is down.
-  const addDot = (el, key, isLost, color) => {
-    // Identity colour, matching this structure's health bar in the scene.
-    // Only applied while it is standing: `.landmark-dot.lost` turns the dot
-    // red from CSS, and an inline background would override that (which is
-    // exactly why the robot/monument/bridge dots used to stay blue/purple/
-    // yellow after being destroyed instead of going red).
-    if (color && !isLost) el.style.background = color;
+  const addDot = (el, key, isLost) => {
+    // Identity colour is carried by the badge's --lm-color (its health
+    // strip), set in landmarkBadge(); the lost look is all CSS.
     if (isLost) {
       lostKeys.add(key);
       if (!prevLostKeys.has(key)) {
@@ -4276,52 +4882,38 @@ function refreshStatusDots() {
   };
 
   if (state.church) {
-    const cDot = document.createElement('div');
-    cDot.className = 'landmark-dot' + (state.church.lost ? ' lost' : '');
-    cDot.title = "Local Church";
-    addDot(cDot, 'church', state.church.lost, landmarkColor('church'));
+    addDot(landmarkBadge('church', 'Local Church', state.church.lost, landmarkColor('church'), state.church),
+           'church', state.church.lost);
   }
 
   if (state.school) {
-    const sDot = document.createElement('div');
-    sDot.className = 'school-dot' + (state.school.lost ? ' lost' : '');
-    sDot.title = "Local School";
-    addDot(sDot, 'school', state.school.lost, landmarkColor('school'));
+    addDot(landmarkBadge('school', 'Local School', state.school.lost, landmarkColor('school'), state.school),
+           'school', state.school.lost);
   }
 
   if (state.robot) {
-    const rDot = document.createElement('div');
-    rDot.className = 'landmark-dot' + (state.robot.lost ? ' lost' : '');
-    rDot.title = "Babo Robot Landmark";
-    addDot(rDot, 'robot', state.robot.lost, landmarkColor('robot'));
+    addDot(landmarkBadge('robot', 'Babo Robot Landmark', state.robot.lost, landmarkColor('robot'), state.robot),
+           'robot', state.robot.lost);
   }
 
   if (state.monument) {
-    const mDot = document.createElement('div');
-    mDot.className = 'landmark-dot' + (state.monument.lost ? ' lost' : '');
-    mDot.title = "Juan Crisostomo Soto Monument";
-    addDot(mDot, 'monument', state.monument.lost, landmarkColor('monument'));
+    addDot(landmarkBadge('monument', 'Juan Crisostomo Soto Monument', state.monument.lost, landmarkColor('monument'), state.monument),
+           'monument', state.monument.lost);
   }
 
   if (state.bridge) {
-    const bDot = document.createElement('div');
-    bDot.className = 'landmark-dot' + (state.bridge.lost ? ' lost' : '');
-    bDot.title = "Bridge";
-    addDot(bDot, 'bridge', state.bridge.lost, landmarkColor('bridge'));
+    addDot(landmarkBadge('bridge', 'Bridge', state.bridge.lost, landmarkColor('bridge'), state.bridge),
+           'bridge', state.bridge.lost);
   }
 
   if (state.creekBridge) {
-    const cbDot = document.createElement('div');
-    cbDot.className = 'landmark-dot' + (state.creekBridge.lost ? ' lost' : '');
-    cbDot.title = 'Creek Bridge';
-    addDot(cbDot, 'creekBridge', state.creekBridge.lost, landmarkColor('creekBridge'));
+    addDot(landmarkBadge('bridge', 'Creek Bridge', state.creekBridge.lost, landmarkColor('creekBridge'), state.creekBridge),
+           'creekBridge', state.creekBridge.lost);
   }
 
   (state.props || []).forEach((p, i) => {
-    const pDot = document.createElement('div');
-    pDot.className = 'landmark-dot' + (p.lost ? ' lost' : '');
-    pDot.title = p.label || 'Local landmark';
-    addDot(pDot, 'prop' + i, p.lost, landmarkColor('prop', i));
+    addDot(landmarkBadge(propIconKey(p.label), p.label || 'Local landmark', p.lost, landmarkColor('prop', i), p),
+           'prop' + i, p.lost);
   });
 
   // Ordinary houses are summarised by one integrity bar instead of one dot
@@ -4435,52 +5027,43 @@ if (toggleEl) {
   });
 }
 
-// Toolbox card icons — the same silhouettes as the in-scene sprites
-// (drawItemShape), so the card a player taps clearly matches the thing
-// that lands on the map.
-function toolIconSVG(type) {
-  switch (type) {
-    case 'sandbag': return `<svg viewBox="0 0 40 40" class="tool-icon">
-      <ellipse cx="20" cy="33" rx="15" ry="3" fill="rgba(0,0,0,.18)"/>
-      <g stroke="#8f6d33" stroke-width="1.4">
-        <ellipse cx="10" cy="28" rx="7" ry="4.6" fill="#c9a45c"/>
-        <ellipse cx="20" cy="29" rx="7" ry="4.6" fill="#c9a45c"/>
-        <ellipse cx="30" cy="28" rx="7" ry="4.6" fill="#c9a45c"/>
-        <ellipse cx="15" cy="21" rx="6.6" ry="4.4" fill="#d9b56b"/>
-        <ellipse cx="25" cy="21" rx="6.6" ry="4.4" fill="#d9b56b"/>
-        <ellipse cx="20" cy="14" rx="6.2" ry="4.2" fill="#e0bd7c"/>
-      </g>
-      <g stroke="rgba(120,88,36,.45)" stroke-width=".8">
-        <path d="M15 10.5v7M20 10v8M25 10.5v7M10 24.5v7M20 25.5v7M30 24.5v7"/>
-      </g></svg>`;
-    case 'shovel':  return `<svg viewBox="0 0 40 40" class="tool-icon">
-      <ellipse cx="21" cy="34" rx="11" ry="3.5" fill="#6b4a28"/>
-      <path d="M16 7h8" stroke="#6f4a26" stroke-width="2.4" fill="none"/>
-      <path d="M15 7q5-6 10 0" stroke="#6f4a26" stroke-width="2.4" fill="none"/>
-      <rect x="17.5" y="7" width="5" height="18" fill="#a9784a" stroke="#6f4a26" stroke-width="1.2"/>
-      <path d="M12 25h16q1 8-8 11-9-3-8-11z" fill="#b9c2c9" stroke="#6d777f" stroke-width="1.4"/>
-      <ellipse cx="16.5" cy="30" rx="2" ry="4" fill="rgba(255,255,255,.5)"/></svg>`;
-    case 'tree':    return `<svg viewBox="0 0 40 40" class="tool-icon">
-      <ellipse cx="21" cy="36" rx="11" ry="3" fill="rgba(30,40,20,.22)"/>
-      <path d="M17.5 36q1.5-9 1.5-14h2q0 5 1.5 14z" fill="#7a5230"/>
-      <path d="M20 22l-6-4M20 24l6-4" stroke="#6b4526" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="11" cy="19" r="7" fill="#2f6b34"/><circle cx="29" cy="19" r="6.8" fill="#2f6b34"/>
-      <circle cx="17" cy="22" r="7.4" fill="#37793c"/><circle cx="25" cy="13" r="7.6" fill="#3f8a46"/>
-      <circle cx="15" cy="12" r="8" fill="#4d9a55"/><circle cx="10" cy="8" r="4.6" fill="#63b768"/>
-      <ellipse cx="13" cy="9" rx="4.5" ry="3" fill="rgba(190,232,150,.45)"/></svg>`;
-    case 'dam':     return `<svg viewBox="0 0 40 40" class="tool-icon">
-      <ellipse cx="20" cy="34" rx="17" ry="3" fill="rgba(30,26,18,.25)"/>
-      <g fill="#8a8378" stroke="#4f4a42" stroke-width=".8">
-        <ellipse cx="7" cy="31" rx="3.4" ry="2.6"/><ellipse cx="15" cy="32" rx="3.2" ry="2.4"/>
-        <ellipse cx="24" cy="31.5" rx="3.4" ry="2.6"/><ellipse cx="32" cy="32" rx="3.2" ry="2.4"/>
-      </g>
-      <path d="M5 31 L8 13 L32 13 L35 31 Z" fill="#c9c2b6" stroke="#6f695e" stroke-width="1.8"/>
-      <g fill="#a9a196"><path d="M12 31l.6-18h3l.6 18z"/><path d="M23 31l-.6-18h3l.6 18z"/></g>
-      <g fill="#4a453d"><ellipse cx="11" cy="26" rx="1.4" ry="1.1"/><ellipse cx="20" cy="26" rx="1.4" ry="1.1"/><ellipse cx="29" cy="26" rx="1.4" ry="1.1"/></g>
-      <rect x="6" y="8" width="28" height="5" fill="#e3ded2" stroke="#6f695e" stroke-width="1.3"/>
-      <g fill="#e0a531"><rect x="8" y="9" width="4" height="3"/><rect x="16" y="9" width="4" height="3"/><rect x="24" y="9" width="4" height="3"/></g></svg>`;
+// Toolbox card icons are rendered FROM drawItemShape, so the card a player
+// taps is exactly the sprite that lands on the map — one drawing, never two
+// hand-kept copies drifting apart. Cached per type as a PNG data URL.
+const TOOL_ICON_CACHE = {};
+const TOOL_ICON_FRAME = {             // centre offset + scale to fit a square card
+  sandbag: { y: 2,  s: 1.85 },
+  shovel:  { y: 17, s: 1.9 },
+  tree:    { y: 9,  s: 2.15 },
+  dam:     { y: -2, s: 1.75 }
+};
+function toolIconURL(type) {
+  if (!TOOL_ICON_CACHE[type]) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const x = c.getContext('2d');
+    const f = TOOL_ICON_FRAME[type] || { y: 0, s: 1.4 };
+    x.translate(64, 64 + f.y);
+    x.scale(f.s, f.s);
+    drawItemShape(x, type, 1, 1);
+    TOOL_ICON_CACHE[type] = c.toDataURL('image/png');
   }
+  return TOOL_ICON_CACHE[type];
 }
+function toolIconSVG(type) {   // name kept: every caller already uses it
+  return `<img class="tool-icon" src="${toolIconURL(type)}" alt="" draggable="false">`;
+}
+// The Town Profile's tool guide carries the same pictures.
+function refreshToolGuideIcons() {
+  document.querySelectorAll('.tg-icon[data-tool]').forEach(el => {
+    const img = document.createElement('img');
+    img.className = 'tg-icon';
+    img.src = toolIconURL(el.dataset.tool);
+    img.alt = '';
+    el.replaceWith(img);
+  });
+}
+refreshToolGuideIcons();
 
 // One-line job description shown on each toolbox card, so a player knows
 // what a tool is FOR before spending on it (the Defense Report then shows
@@ -4527,7 +5110,12 @@ function refreshToolboxAfford() {
   // begin the wave before deploying anything.
   const locked = !state.running || state.gameOver;
   containerEl.querySelectorAll('.tool-item').forEach(item => {
-    item.classList.toggle('disabled', locked || TOOL_DEFS[item.dataset.type].price > state.budget);
+    const poor = !locked && TOOL_DEFS[item.dataset.type].price > state.budget;
+    item.classList.toggle('disabled', locked || poor);
+    // Separate reasons so the tile can say WHY it can't be used:
+    // 'locked' = the storm hasn't started, 'poor' = not enough budget.
+    item.classList.toggle('locked', locked);
+    item.classList.toggle('poor', poor);
   });
 }
 
@@ -4554,18 +5142,17 @@ function selectTool(type) {
   selectedTool = type;
   containerEl.querySelectorAll('.tool-item').forEach(i => {
     const on = i.dataset.type === type;
+    // The armed look lives entirely in CSS (.tool-item.armed).
     i.classList.toggle('armed', on);
-    i.style.borderColor = on ? '#22c55e' : '';
-    i.style.boxShadow = on ? '0 0 0 3px rgba(34,197,94,0.55), 0 6px 16px rgba(0,0,0,.22)' : '';
   });
-  showToast(`${TOOL_DEFS[type].name} — ${TOOL_BLURBS[type]}. Tap the map to place it.`, 1800);
+  showToast(toolIconSVG(type) + ` <b>${TOOL_DEFS[type].name}</b> — ${TOOL_BLURBS[type]}. Tap the map to place it.`, 1800, 'info');
 }
 
 function deselectTool() {
   selectedTool = null;
   dragPreviewPos = null;
   containerEl.querySelectorAll('.tool-item').forEach(i => {
-    i.classList.remove('armed'); i.style.borderColor = ''; i.style.boxShadow = '';
+    i.classList.remove('armed');
   });
 }
 
@@ -4688,15 +5275,92 @@ function tryPlaceItem(type, x, y) {
 
 /* ---------------- HUD / TOAST ---------------- */
 const toastEl = document.getElementById('toast');
+// The notice stack lives inside the game area, not loose in <body>: it is
+// positioned relative to the game (whatever the screen shape) and sized in
+// the HUD's --u units, which are only defined on #gameWrap.
+(function adoptToast() {
+  const gw = document.getElementById('gameWrap');
+  if (gw && toastEl && toastEl.parentElement !== gw) gw.appendChild(toastEl);
+})();
 
-function showToast(msg, dur = 1600) {
-  /* innerHTML rather than textContent so a toast can carry a drawn icon.
-     Every string passed in is authored in this file — no player input ever
-     reaches here, so there is nothing to escape. */
-  toastEl.innerHTML = msg; 
-  toastEl.classList.add('show');
-  clearTimeout(state.toastTimer);
-  state.toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
+/* ---- Notifications ----
+   Up to three notices stack under the HUD. Each is coloured and iconed by
+   what it MEANS, so a player can tell good news from bad without reading:
+     loss   red    — a house or landmark is gone
+     money  green  — money collected, combo bonus
+     warn   amber  — something is in danger / can't be done
+     good   green  — a defense worked, a wave was survived
+     storm  blue   — the storm or a wave starts
+     info   paper  — tips and tool descriptions
+   The kind is worked out from the wording, so every existing call site
+   keeps working unchanged; callers may pass one explicitly as the third
+   argument. A repeat of a message already showing merges into it with a
+   count ("House lost! ×3") instead of stacking copies. Display time is
+   stretched to how long the text takes to read, and a thin bar along the
+   bottom shows how long each notice has left.
+
+   innerHTML, as before, so a notice can carry a drawn icon. Every string
+   passed in is authored in this file — no player input reaches here. */
+const TOAST_MAX = 3;
+const TOAST_KIND_ICON = { loss: 'cross', money: 'money', warn: 'warn', good: 'shield', storm: 'storm', info: 'tap' };
+function toastKind(text) {
+  const t = text.toLowerCase();
+  if (/about to|washing away|not enough|first|too low|only help|place defenses|no lahar channel|please|can only/.test(t)) return 'warn';
+  if (/money|combo|bonus|\+₱/.test(t)) return 'money';
+  if (/lost|destroyed|fell|collaps|buried|is gone/.test(t)) return 'loss';
+  if (/survived|placed|diverted|caught|planted|covered/.test(t)) return 'good';
+  if (/storm|wave begins|begun/.test(t)) return 'storm';
+  return 'info';
+}
+function showToast(msg, dur = 1600, kind) {
+  // Pull a leading drawn icon (svg or tool image) out into the icon slot.
+  let icon = '', body = String(msg).trim();
+  const m = body.match(/^(<svg[\s\S]*?<\/svg>|<img[^>]*>)\s*/);
+  if (m) { icon = m[1]; body = body.slice(m[0].length); }
+  const plain = body.replace(/<[^>]*>/g, '');
+  kind = kind || toastKind(plain);
+  if (!icon) icon = uiIcon(TOAST_KIND_ICON[kind] || 'tap');
+  // Time to actually read it: ~230ms a word on top of a short base.
+  const words = plain.split(/\s+/).filter(Boolean).length;
+  const life = Math.min(6500, Math.max(dur, 700 + words * 230));
+
+  // Same message already on screen? Count it up and restart its clock.
+  for (const el of toastEl.children) {
+    if (el._key === plain && !el.classList.contains('out')) {
+      el._count = (el._count || 1) + 1;
+      el.querySelector('.tn-count').textContent = '×' + el._count;
+      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+      armToast(el, life);
+      return;
+    }
+  }
+  const el = document.createElement('div');
+  el.className = 'tn tn-' + kind;
+  el.setAttribute('role', kind === 'loss' || kind === 'warn' ? 'alert' : 'status');
+  el._key = plain;
+  el.innerHTML = `<span class="tn-ico">${icon}</span><span class="tn-msg">${body}</span>` +
+                 `<span class="tn-count"></span><span class="tn-time"></span>`;
+  toastEl.prepend(el);                                  // newest on top
+  // Too many? Retire the oldest.
+  const live = [...toastEl.children].filter(c => !c.classList.contains('out'));
+  live.slice(TOAST_MAX).forEach(dismissToast);
+  armToast(el, life);
+}
+function armToast(el, life) {
+  clearTimeout(el._timer);
+  const bar = el.querySelector('.tn-time');
+  bar.style.animation = 'none'; void bar.offsetWidth;
+  bar.style.animation = `tnTime ${life}ms linear forwards`;
+  el._timer = setTimeout(() => dismissToast(el), life);
+}
+function dismissToast(el) {
+  if (el.classList.contains('out')) return;
+  clearTimeout(el._timer);
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 260);
+}
+function clearToasts() {
+  [...toastEl.children].forEach(el => { clearTimeout(el._timer); el.remove(); });
 }
 
 function updateBudgetUI() {
@@ -4708,7 +5372,9 @@ function updateBudgetUI() {
     const pct = Math.max(0, state.budget / state.budgetMax * 100);
     budgetBarFillEl.style.width = pct + '%';
     if (budgetAmtEl) budgetAmtEl.classList.toggle('low', pct < 20);
-    budgetBarFillEl.style.background = pct < 20 ? 'var(--budget-red)' : 'var(--budget-green)';
+    // Colour comes from CSS (#budgetBar.low) so the bar keeps its styling.
+    const barEl = document.getElementById('budgetBar');
+    if (barEl) barEl.classList.toggle('low', pct < 20);
   }
 }
 
@@ -4731,14 +5397,27 @@ document.getElementById('rainPanel').addEventListener('click', () => {
   playSound('storm');
   // Warm the recorded effects up front so the first impact is not silent.
   loadSfx('house_destroyed');
+  loadSfx('money_collect');
   loadSfx('rock_crash');
   state.raining = true; state.running = true;
+
+  /* Open the toolbox the first time the storm starts. The tools unlock at
+     exactly this moment, and a panel that stays shut behind a tab is easy
+     to miss — a player can spend the whole first wave not realising they
+     have anything to place. Opened once only: after this it is the
+     player's own toggle, so closing it stays closed. */
+  if (!state.toolboxAutoOpened) {
+    state.toolboxAutoOpened = true;
+    const tb = document.getElementById('toolbox');
+    if (tb) tb.classList.remove('collapsed');
+  }
+
   // Name the local hazard once, so the player knows what is coming and why
   // this town plays differently from the others.
   const hz0 = townHazard();
   if (hz0 && !state.hazardAnnounced) {
     state.hazardAnnounced = true;
-    setTimeout(() => showToast('⚠ ' + hz0.name + ' — ' + hz0.brief, 5200), 900);
+    setTimeout(() => showToast(uiIcon('warn') + ' ' + hz0.name + ' — ' + hz0.brief, 5200), 900);
   }
 
   // Defenses become available now that the storm is underway — un-grey the
@@ -4765,7 +5444,7 @@ document.getElementById('rainPanel').addEventListener('click', () => {
   state.villagersFleeStartAmbient = ambientTime;
 
   document.getElementById('rainPanel').classList.add('active');
-  document.getElementById('rainStatus').textContent = 'Storm Active';
+  document.getElementById('rainStatus').textContent = 'Storm active';
   showToast("Storm begun! Defend the village!");
 });
 
@@ -5887,8 +6566,8 @@ function updateTownHazard(dt) {
         state.screenShake = Math.max(state.screenShake, 5);
       }
     };
-    warnAt(70, '⚠ The ground under the bridge is washing away — build above it!');
-    warnAt(40, '⚠ The bridge is about to collapse!');
+    warnAt(70, uiIcon('warn') + ' The ground under the bridge is washing away — build above it!');
+    warnAt(40, uiIcon('warn') + ' The bridge is about to collapse!');
 
     if (br.hp <= 0 && !br.lost) {
       br.lost = true;
@@ -5929,26 +6608,231 @@ function updateCollapseDust(dt) {
    invisible arithmetic and the tool feels dead again — the player has to
    SEE the number climb as each sapling matures. Also marks the planting
    line while a tree is armed, so the rule is discoverable. */
+/* ============================================================
+   PLACEMENT GUIDES
+   ------------------------------------------------------------
+   Every tool has a different placement rule and the game never
+   showed any of them, so a player could spend ₱750K on a dike
+   that touches no channel and simply watch it do nothing. Arming
+   a tool now shows WHERE it works:
+
+     Dike / Shovel — the channels light up. Both only do anything
+                     when they sit in the mud's path, so the path
+                     itself is the target.
+     Sandbag       — the buildings currently in the flow's path
+                     are ringed. A sandbag shields what is behind
+                     it, so the answer is "between the mud and one
+                     of these".
+     Tree          — the slope boundary (drawn separately).
+
+   Cheap by design: it reuses the existing channel geometry and
+   runs only while a tool is armed, so it costs nothing in normal
+   play.
+   ============================================================ */
+function guideBanner(context, text, sub, cx, cy, accent) {
+  context.save();
+  context.textBaseline = 'middle';
+  context.font = "900 17px Nunito, sans-serif";
+  const tw = context.measureText(text).width;
+  context.font = "700 12px Nunito, sans-serif";
+  const sw = sub ? context.measureText(sub).width : 0;
+  const bw = Math.max(tw, sw) + 30, bh = sub ? 44 : 30;
+  const bx = Math.max(6, Math.min(W - bw - 6, cx - bw / 2));
+  const by = cy;
+  const pulse = 0.5 + Math.sin(ambientTime * 3.4) * 0.5;
+
+  context.fillStyle = 'rgba(14, 20, 30, 0.92)';
+  roundRectCtx(context, bx, by, bw, bh, 12); context.fill();
+  context.strokeStyle = accent.replace('ALPHA', String(0.65 + pulse * 0.35));
+  context.lineWidth = 2.5;
+  roundRectCtx(context, bx, by, bw, bh, 12); context.stroke();
+
+  context.textAlign = 'center';
+  context.font = "900 17px Nunito, sans-serif";
+  context.fillStyle = '#eef6ff';
+  context.fillText(text, bx + bw / 2, by + (sub ? 15 : 15));
+  if (sub) {
+    context.font = "700 12px Nunito, sans-serif";
+    context.fillStyle = 'rgba(210, 228, 245, 0.9)';
+    context.fillText(sub, bx + bw / 2, by + 32);
+  }
+  context.restore();
+}
+
+function drawPlacementGuide(context) {
+  const tool = selectedTool;
+  if (!tool || tool === 'tree') return;          // the tree has its own guide
+  const pulse = 0.5 + Math.sin(ambientTime * 3.4) * 0.5;
+
+  if (tool === 'dam' || tool === 'shovel') {
+    /* Light the channels. A dike walls one off and a shovel bends one
+       away — neither does anything away from the mud's path. */
+    context.save();
+    context.lineCap = 'round';
+    let lit = 0;                                    // channels actually glowing
+    for (let i = 0; i < channelPaths.length; i++) {
+      const path = channelPaths[i];
+      if (!path || path.length < 2) continue;
+
+      /* Only light the stretch the mud has ALREADY covered. Tracing the
+         whole channel drew the route before the lahar took it, which told
+         the player in advance exactly where every flow was going to run —
+         that is the game's main tension given up for free. The glow now
+         follows the front down the mountain, so it marks where you can
+         build right now rather than previewing the future. */
+      const travelled = (state.laharProgresses[i] || 0) * (CHANNEL_LENS[i] || 0);
+      if (travelled <= 1) continue;                 // nothing flowing yet
+      const pts = [];
+      let acc = 0;
+      for (let k = 1; k < path.length; k++) {
+        const a0 = path[k - 1], b0 = path[k];
+        const seg = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+        if (acc === 0) pts.push(a0);
+        if (acc + seg >= travelled) {
+          const f = (travelled - acc) / (seg || 1);
+          pts.push({ x: a0.x + (b0.x - a0.x) * f, y: a0.y + (b0.y - a0.y) * f });
+          break;
+        }
+        pts.push(b0);
+        acc += seg;
+      }
+      // Only the part on placeable ground can actually be built on.
+      const onGround = pts.filter(pt => pt.y >= GRASS_MIN_Y - 10);
+      if (onGround.length < 2) continue;
+      pts.length = 0; pts.push(...onGround);
+      lit++;
+      const trace = () => {
+        context.beginPath();
+        context.moveTo(pts[0].x, pts[0].y);
+        for (let k = 1; k < pts.length; k++) context.lineTo(pts[k].x, pts[k].y);
+      };
+      context.globalAlpha = 0.22 + pulse * 0.16;      // soft outer glow
+      context.strokeStyle = '#7fd4ff';
+      context.lineWidth = 26;
+      trace(); context.stroke();
+      context.globalAlpha = 0.5 + pulse * 0.3;        // bright core
+      context.strokeStyle = '#d8f3ff';
+      context.lineWidth = 4;
+      context.setLineDash([16, 12]);
+      context.lineDashOffset = -ambientTime * 26;     // flows downhill
+      trace(); context.stroke();
+      context.setLineDash([]);
+    }
+    context.restore();
+    /* Before the mud reaches the plain there is nothing lit to aim at, and
+       telling the player to "place on a glowing channel" when none exists
+       just reads as a broken instruction. Say what is actually true. */
+    if (lit) {
+      guideBanner(context,
+        tool === 'dam' ? 'PLACE ON A GLOWING CHANNEL' : 'DIG ON A GLOWING CHANNEL',
+        tool === 'dam' ? 'a dike only works in the mud\u2019s path'
+                       : 'bends that channel away from your buildings',
+        W / 2, GRASS_MIN_Y + 16, 'rgba(127, 212, 255, ALPHA)');
+    } else {
+      guideBanner(context, 'WAIT FOR THE MUD',
+        'channels light up as the lahar reaches them',
+        W / 2, GRASS_MIN_Y + 16, 'rgba(160, 175, 195, ALPHA)');
+    }
+
+  } else if (tool === 'sandbag') {
+    /* Ring the buildings the mud can actually reach, so the player can see
+       what needs shielding rather than guessing. */
+    context.save();
+    let ringed = 0;
+    for (const o of allStructures()) {
+      if (o.lost) continue;
+      let near = Infinity;
+      for (let i = 0; i < channelPaths.length; i++) {
+        const d = distToTraveledPath(channelPaths[i], CHANNEL_LENS[i], o.x, o.y);
+        if (d < near) near = d;
+      }
+      if (near > 86) continue;                        // out of the mud's reach
+      ringed++;
+      context.globalAlpha = 0.3 + pulse * 0.35;
+      context.strokeStyle = '#ffd166';
+      context.lineWidth = 2.6;
+      context.beginPath();
+      context.ellipse(o.x, o.y + 2, 26, 12, 0, 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.restore();
+    if (ringed) {
+      guideBanner(context, 'SHIELD A RINGED BUILDING',
+        'put the sandbag between it and the mud',
+        W / 2, GRASS_MIN_Y + 16, 'rgba(255, 209, 102, ALPHA)');
+    }
+  }
+}
+
 function drawSlopeCoverHUD(context) {
   const cover = slopeCover();
   const arming = selectedTool === 'tree';
   if (cover <= 0.001 && !arming) return;
 
   if (arming) {
-    // Dashed line showing where trees start counting as slope cover.
+    /* The single most important instruction in the game was 12px of
+       semi-transparent green text sitting directly on a busy mountainside —
+       easy to miss entirely, and it is the difference between a tree that
+       works and one that does nothing. It now reads as a proper boundary:
+       a shaded valid zone, a heavy two-tone line, arrows pointing into the
+       zone, and the label on its own solid banner. */
+    const y = SLOPE_COVER_LINE;
+    const pulse = 0.5 + Math.sin(ambientTime * 3.4) * 0.5;
     context.save();
-    context.setLineDash([9, 7]);
-    context.strokeStyle = 'rgba(122, 200, 120, 0.85)';
-    context.lineWidth = 2;
-    context.beginPath();
-    context.moveTo(10, SLOPE_COVER_LINE);
-    context.lineTo(W - 10, SLOPE_COVER_LINE);
-    context.stroke();
+
+    // Tint the zone where planting actually counts, fading upward so it
+    // reads as "this side" rather than a block of colour.
+    const zone = context.createLinearGradient(0, y - 92, 0, y);
+    zone.addColorStop(0, 'rgba(110, 226, 127, 0)');
+    zone.addColorStop(1, `rgba(110, 226, 127, ${0.13 + pulse * 0.07})`);
+    context.fillStyle = zone;
+    context.fillRect(0, y - 92, W, 92);
+
+    // Two-tone line: a dark underlay so the bright dashes stay legible over
+    // pale ash as well as dark rock.
+    context.strokeStyle = 'rgba(12, 32, 14, 0.75)';
+    context.lineWidth = 6;
+    context.beginPath(); context.moveTo(6, y); context.lineTo(W - 6, y); context.stroke();
+    context.setLineDash([13, 9]);
+    context.strokeStyle = `rgba(150, 255, 160, ${0.85 + pulse * 0.15})`;
+    context.lineWidth = 3;
+    context.beginPath(); context.moveTo(6, y); context.lineTo(W - 6, y); context.stroke();
     context.setLineDash([]);
-    context.font = "800 12px Nunito, sans-serif";
-    context.fillStyle = 'rgba(122, 200, 120, 0.95)';
+
+    // Arrows along the line, pointing into the valid zone.
+    context.fillStyle = `rgba(150, 255, 160, ${0.7 + pulse * 0.3})`;
+    for (let ax = 44; ax < W - 20; ax += 92) {
+      const lift = pulse * 2.5;
+      context.beginPath();
+      context.moveTo(ax, y - 9 - lift);
+      context.lineTo(ax + 6.5, y - 2 - lift);
+      context.lineTo(ax - 6.5, y - 2 - lift);
+      context.closePath(); context.fill();
+    }
+
+    // The label on a solid banner, so it never competes with the terrain.
+    const text = 'PLANT ABOVE THIS LINE';
+    const sub = 'trees here weaken the mud everywhere';
+    context.font = "900 17px Nunito, sans-serif";
+    const tw = context.measureText(text).width;
+    context.font = "700 12px Nunito, sans-serif";
+    const sw = context.measureText(sub).width;
+    const bw = Math.max(tw, sw) + 30, bh = 44, bx = W / 2 - bw / 2, by = y - 62;
+
+    context.fillStyle = 'rgba(14, 34, 16, 0.92)';
+    roundRectCtx(context, bx, by, bw, bh, 12); context.fill();
+    context.strokeStyle = `rgba(150, 255, 160, ${0.65 + pulse * 0.35})`;
+    context.lineWidth = 2.5;
+    roundRectCtx(context, bx, by, bw, bh, 12); context.stroke();
+
     context.textAlign = 'center';
-    context.fillText('PLANT ABOVE THIS LINE TO WEAKEN THE MUD', W / 2, SLOPE_COVER_LINE - 7);
+    context.textBaseline = 'middle';
+    context.font = "900 17px Nunito, sans-serif";
+    context.fillStyle = '#d8ffdd';
+    context.fillText(text, W / 2, by + 15);
+    context.font = "700 12px Nunito, sans-serif";
+    context.fillStyle = 'rgba(190, 240, 195, 0.9)';
+    context.fillText(sub, W / 2, by + 32);
     context.restore();
   }
 
@@ -6000,7 +6884,13 @@ function drawSlopeCoverHUD(context) {
   context.textBaseline = 'middle';
   context.font = "15px Nunito, sans-serif";
   context.textAlign = 'left';
-  context.fillText('\u{1F333}', bx + 6, by + 13);
+  // Tiny version of the placed tree sprite (was a 🌳 emoji glyph)
+  context.save();
+  context.translate(bx + 13, by + 16);
+  context.scale(0.36, 0.36);
+  drawItemShape(context, 'tree', 1, 1);
+  context.restore();
+  context.textBaseline = 'middle';
 
   context.font = "800 10px Nunito, sans-serif";
   context.fillStyle = full ? 'rgba(255,229,160,0.9)' : 'rgba(190,225,185,0.85)';
@@ -6367,25 +7257,36 @@ function scoreGrade(score, won) {
    page: identical everywhere, sharp at any DPI, and on-palette.
    ============================================================ */
 const UI_ICON = {
-  trophy: "<path d='M7 3h10v5a5 5 0 0 1-10 0z' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7' stroke-linejoin='round'/><path d='M7 4.5H4.2v1.8A3.2 3.2 0 0 0 7.4 9.5M17 4.5h2.8v1.8a3.2 3.2 0 0 1-3.2 3.2' fill='none' stroke='#8a5a12' stroke-width='1.7'/><path d='M10.5 13h3v3.5h-3z' fill='#e0a52e' stroke='#8a5a12' stroke-width='1.5'/><path d='M7.5 20.5h9l-1-3.5h-7z' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7' stroke-linejoin='round'/>",
-  shield: "<path d='M12 2.5 20 5.4v6.2c0 5-3.4 8.7-8 9.9-4.6-1.2-8-4.9-8-9.9V5.4z' fill='#cfe0f2' stroke='#3c5f88' stroke-width='1.7' stroke-linejoin='round'/><path d='M8.4 12.2l2.6 2.6 4.8-5' fill='none' stroke='#3c5f88' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>",
-  temple: "<path d='M12 2.6 22 7.4H2z' fill='#e8dfc9' stroke='#6b5a34' stroke-width='1.6' stroke-linejoin='round'/><path d='M4.6 9h2.2v8H4.6zM10.9 9h2.2v8h-2.2zM17.2 9h2.2v8h-2.2z' fill='#f2eada' stroke='#6b5a34' stroke-width='1.4'/><path d='M2 18.6h20V21H2z' fill='#e8dfc9' stroke='#6b5a34' stroke-width='1.6' stroke-linejoin='round'/>",
-  money: "<path d='M6 8h12a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3z' fill='#cbe6c4' stroke='#2f6b34' stroke-width='1.7'/><path d='M9.4 4.4 12 7.9l2.6-3.5' fill='none' stroke='#2f6b34' stroke-width='1.7' stroke-linecap='round'/><path d='M12 11v6M10 12.6h3.4a1.4 1.4 0 0 1 0 2.8H10' fill='none' stroke='#2f6b34' stroke-width='1.7' stroke-linecap='round'/>",
-  storm: "<path d='M6.6 11.4a4 4 0 0 1 .8-7.9 5.2 5.2 0 0 1 9.8 1.2 3.8 3.8 0 0 1-.6 7.5z' fill='#c3cddb' stroke='#4a5a70' stroke-width='1.6' stroke-linejoin='round'/><path d='M12.6 12.4 9.4 17h3l-1.4 4.4L15 15.6h-3z' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.4' stroke-linejoin='round'/>",
-  bolt: "<path d='M13.4 2 5 13.4h5.2L9.2 22 19 10.2h-5.4z' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7' stroke-linejoin='round'/>",
-  tree: "<path d='M12 2.6 19 12h-3.6l3.2 5H5.4l3.2-5H5z' fill='#63a94e' stroke='#2f5d2a' stroke-width='1.7' stroke-linejoin='round'/><path d='M10.6 17h2.8v4.4h-2.8z' fill='#7a5230' stroke='#3f2b17' stroke-width='1.4'/>",
-  wall: "<path d='M2.5 6.5h19v4h-19zM2.5 13.5h19v4h-19z' fill='#c9b79c' stroke='#6b4a18' stroke-width='1.6'/><path d='M9 6.5v4M15.5 6.5v4M5.6 13.5v4M12.4 13.5v4M18.8 13.5v4' stroke='#6b4a18' stroke-width='1.4'/>",
-  sweat: "<circle cx='12' cy='12' r='9' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7'/><path d='M8.4 9.6h.02M15.6 9.6h.02' stroke='#8a5a12' stroke-width='2.6' stroke-linecap='round'/><path d='M8 15.4c2.4 1.8 5.6 1.8 8 0' fill='none' stroke='#8a5a12' stroke-width='1.8' stroke-linecap='round'/><path d='M19.4 6.6c1.4 2 1.4 3.4 0 3.4s-1.4-1.4 0-3.4z' fill='#7fc4e8' stroke='#33698c' stroke-width='1.2'/>",
-  muscle: "<path d='M3.5 13.5c0-3.4 2.6-5.4 5.6-5.4 1.8 0 2.6-1 2.6-2.6L15 6.4c2.8.8 5.5 3 5.5 6.6 0 4-3.2 6.8-7.6 6.8-5 0-9.4-2.2-9.4-6.3z' fill='#f3c08a' stroke='#8a5a12' stroke-width='1.7' stroke-linejoin='round'/><path d='M8.6 12.6c1.8-1 3.6-1 5 .4' fill='none' stroke='#8a5a12' stroke-width='1.6' stroke-linecap='round'/>",
-  wave: "<path d='M2 15c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2' fill='none' stroke='#4d86c4' stroke-width='2.4' stroke-linecap='round'/><path d='M2 20c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 4.8 2' fill='none' stroke='#7fb2e8' stroke-width='2.2' stroke-linecap='round'/><path d='M12 10V3M12 3 8.8 6.4M12 3l3.2 3.4' fill='none' stroke='#4d86c4' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>",
-  party: "<path d='M3 21 8.6 8.2 15.8 15.4z' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7' stroke-linejoin='round'/><circle cx='18.4' cy='5.6' r='1.5' fill='#e8584b'/><circle cx='21' cy='11' r='1.3' fill='#63a94e'/><circle cx='13.6' cy='3.4' r='1.3' fill='#4d86c4'/>",
-  cross: "<circle cx='12' cy='12' r='9.2' fill='#e8584b' stroke='#7d241c' stroke-width='1.7'/><path d='M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2' stroke='#fff0ec' stroke-width='2.4' stroke-linecap='round'/>",
+  trophy: "<path d='M7 3.5h10v4.6a5 5 0 0 1-10 0z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 3.5h5v4.6a5 5 0 0 1-5 5z' fill='#e9a52c'/><path d='M7 3.5h10v4.6a5 5 0 0 1-10 0z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7 5H4.3v1.4A3.3 3.3 0 0 0 7.6 9.7M17 5h2.7v1.4a3.3 3.3 0 0 1-3.3 3.3' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M10.6 13h2.8v3.4h-2.8z' fill='#e9a52c' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7.4 20.6h9.2l-1-4.2H8.4z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M9 5.2v3' stroke='#fff' stroke-width='1.6' stroke-linecap='round' opacity='.75'/>",
+  medal: "<path d='M8.2 2.2 10.6 9M15.8 2.2 13.4 9' stroke='#3a2913' stroke-width='4.2' stroke-linecap='round'/><path d='M8.2 2.2 10.6 9M15.8 2.2 13.4 9' stroke='#4d86c4' stroke-width='2.2' stroke-linecap='round'/><circle cx='12' cy='14.8' r='6.4' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='14.8' r='3.6' fill='#e9a52c' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  shield: "<path d='M12 2.6 20 5.5v6c0 5-3.4 8.6-8 9.9-4.6-1.3-8-4.9-8-9.9v-6z' fill='#8fb8e6' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 2.6 20 5.5v6c0 5-3.4 8.6-8 9.9z' fill='#6c97c9'/><path d='M12 2.6 20 5.5v6c0 5-3.4 8.6-8 9.9-4.6-1.3-8-4.9-8-9.9v-6z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='m8.3 12 2.6 2.6 4.9-5.2' fill='none' stroke='#fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/>",
+  temple: "<path d='M3.5 21V10.5L9 6l5.5 4.5V21z' fill='#efe3c8' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M14.5 21V6.2h5V21z' fill='#d9c9a6' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M14.5 6.2 17 2.6l2.5 3.6z' fill='#c0564a' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7 21v-5a2 2 0 0 1 4 0v5z' fill='#6b4a2c' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='9' cy='11' r='1.4' fill='#6b4a2c'/><path d='M16.2 9.2h1.6v2.4h-1.6z' fill='#6b4a2c'/><path d='M2 21h20' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  money: "<path d='M8.6 7.4C5 9.8 3.8 13 4.2 16.2c.4 3 3.2 4.8 7.8 4.8s7.4-1.8 7.8-4.8c.4-3.2-.8-6.4-4.4-8.8z' fill='#dcb872' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 21c4.6 0 7.4-1.8 7.8-4.8.4-3.2-.8-6.4-4.4-8.8H12z' fill='#b8914c'/><path d='M8.6 7.4C5 9.8 3.8 13 4.2 16.2c.4 3 3.2 4.8 7.8 4.8s7.4-1.8 7.8-4.8c.4-3.2-.8-6.4-4.4-8.8z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M8.8 3.2c1.4.9 5 .9 6.4 0l-1.6 4.2h-3.2z' fill='#dcb872' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M8.6 7.4h6.8' stroke='#a3402c' stroke-width='2' stroke-linecap='round'/><path d='M10.6 17.8v-6h2a1.9 1.9 0 0 1 0 3.8h-2M9.4 12.8h5.2M9.4 14.2h5.2' fill='none' stroke='#3a2913' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/>",
+  storm: "<path d='M6.6 12a4.1 4.1 0 0 1 .7-8.2 5.3 5.3 0 0 1 10 1.2 3.6 3.6 0 0 1-.2 7z' fill='#c9d3df' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M6 8.6a3 3 0 0 1 3-2.4' fill='none' stroke='#fff' stroke-width='1.4' stroke-linecap='round'/><path d='M12.8 12 10 16.6h2.8l-1.4 4.8 4.6-6.2h-3l1.6-3.2z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M6.4 15.4 5.4 18M8 17.8l-.8 2.2' stroke='#4d86c4' stroke-width='1.8' stroke-linecap='round'/>",
+  bolt: "<path d='M13.6 2 5 13.4h5.4L9.2 22 19 10.2h-5.6z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12.2 5.2 8 11' stroke='#fff' stroke-width='1.4' stroke-linecap='round' opacity='.8'/>",
+  tree: "<path d='M10.6 14.5h2.8v6.5h-2.8z' fill='#9a6a3c' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 2.8c3 0 5.2 2 5.3 4.6 2 .6 3.1 2.2 3 4-.2 2.4-2.3 4-5 4H8.7c-2.7 0-4.8-1.6-5-4-.1-1.8 1-3.4 3-4C6.8 4.8 9 2.8 12 2.8z' fill='#4f9a4f' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M16 15.4c2.4-.2 4.2-1.8 4.3-4-.8 1.6-2.6 2.4-4.6 2.3-2.2 1.2-5 1.4-7.4.6z' fill='#35753a'/><path d='M8.2 6.4a4 4 0 0 1 3-2' fill='none' stroke='#9fdc86' stroke-width='1.6' stroke-linecap='round'/><path d='M4.5 21h15' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  wall: "<path d='M3 19.6 5 9.4h14l2 10.2z' fill='#d8d1c3' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M14.6 9.4H19l2 10.2h-5.4z' fill='#b5ad9e'/><path d='M3 19.6 5 9.4h14l2 10.2z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M4.2 5.4h15.6v4H4.2z' fill='#f2c230' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7 9.4l3-4M11.6 9.4l3-4M16.2 9.4l3-4' stroke='#3a2913' stroke-width='1.8'/><circle cx='8.6' cy='15.4' r='1' fill='#3a2913'/><circle cx='15.4' cy='15.4' r='1' fill='#3a2913'/>",
+  sweat: "<circle cx='12' cy='12.6' r='8.6' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 21.2a8.6 8.6 0 0 0 8.6-8.6 8.6 8.6 0 0 1-12.8 7.5z' fill='#e9a52c'/><circle cx='12' cy='12.6' r='8.6' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='9' cy='11' r='1.1' fill='#3a2913'/><circle cx='15' cy='11' r='1.1' fill='#3a2913'/><path d='M8.6 15.4c2 1.6 4.8 1.6 6.8 0' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M19.4 2.8c1.4 2 2 3 2 4a2 2 0 0 1-4 0c0-1 .6-2 2-4z' fill='#8fc8ef' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  muscle: "<path d='M3.6 15.6a8.4 8.4 0 0 1 16.8 0z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 7.2a8.4 8.4 0 0 1 8.4 8.4h-4.6c0-3.6-1.4-6.8-3.8-8.4z' fill='#e9a52c'/><path d='M3.6 15.6a8.4 8.4 0 0 1 16.8 0z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M10.4 7.4h3.2v8.2h-3.2z' fill='#fff2c4' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M1.8 15.6h20.4v3.2H1.8z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M6.4 11.4a5.4 5.4 0 0 1 2.2-2.6' fill='none' stroke='#fff' stroke-width='1.4' stroke-linecap='round'/>",
+
+  wave: "<path d='M2 20.6c1-6 4.4-11.2 10.2-12.4 4.4-.9 8.2 1.4 8.8 5-2.2-1.6-5-1.4-6.4.4 1.4.4 2.4 1.6 2.2 3.2-2-.8-4.4-.4-5.4 1.4 3 .6 6.6.4 10.6-1.2v3.6z' fill='#7a6552' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12.2 8.2c3.2-.6 6.2.6 7.6 3' fill='none' stroke='#d6c9ae' stroke-width='1.6' stroke-linecap='round'/><circle cx='7.4' cy='17.6' r='1.9' fill='#9a948a' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  party: "<path d='M3 21 8.4 8 16 15.6z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M5.2 15.8 8.6 18.6M6.8 11.8 12 16.6' stroke='#e05a3c' stroke-width='1.8' stroke-linecap='round'/><path d='M3 21 8.4 8 16 15.6z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M13 3.2c.8 1.4.4 2.8-.8 3.6M20.4 9.6c-1.4-.6-2.8-.2-3.6 1' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='18.6' cy='5.2' r='1.5' fill='#e05a3c' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='21' cy='13.6' r='1.2' fill='#4d86c4'/><circle cx='15.6' cy='2.6' r='1' fill='#4f9a4f'/>",
+  cross: "<circle cx='12' cy='12' r='9' fill='#de4430' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 21a9 9 0 0 0 9-9 9 9 0 0 1-13.4 7.8z' fill='#a82718'/><circle cx='12' cy='12' r='9' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='m8.4 8.4 7.2 7.2m0-7.2-7.2 7.2' stroke='#fff' stroke-width='2.6' stroke-linecap='round'/>",
+  pin: "<path d='M12 22s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z' fill='#de4430' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 22s7-7.2 7-12a7 7 0 0 0-3.4-6 7 7 0 0 1-3.6 13.4z' fill='#a82718'/><path d='M12 22s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><circle cx='12' cy='9.6' r='2.8' fill='#fdf4de' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  volcano: "<path d='M1.6 21 8 9.6h8L22.4 21z' fill='#b9ad95' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M13.4 9.6H16L22.4 21h-5.6z' fill='#958b78'/><path d='M1.6 21 8 9.6h8L22.4 21z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M8 9.6c1.4 1.4 6.6 1.4 8 0' fill='#4fc0b6' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M9 21l2-6.6M15 21l-1.4-5' stroke='#e8dcc4' stroke-width='1.6' stroke-linecap='round'/><path d='M11.2 7.6c-1.6-1.2-1-3.2.6-3.4 0-1.8 2.6-2.2 3.2-.6 1.6-.2 2.2 1.8 1 2.8' fill='#e6e2d8' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  tap: "<path d='M9 13.4V5.2a1.7 1.7 0 0 1 3.4 0v6' fill='#f0bd86' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12.4 11.2V9.6a1.6 1.6 0 0 1 3.2 0v2.2m0 0v-1a1.6 1.6 0 0 1 3.2 0V16a5.4 5.4 0 0 1-5.4 5.4h-1.8a5.4 5.4 0 0 1-4.3-2.2l-2.8-3.8a1.7 1.7 0 0 1 2.6-2.2L9 15.2' fill='#f0bd86' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M5.4 4.4 3.8 3.2M5 7.6H3' stroke='#3a2913' stroke-width='1.5' stroke-linecap='round'/>",
+  person: "<circle cx='12' cy='8' r='4.2' fill='#f0bd86' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M4 21a8 8 0 0 1 16 0z' fill='#4d86c4' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 13a8 8 0 0 1 8 8h-5c0-3-1.2-6.4-3-8z' fill='#3a6ea5'/><path d='M4 21a8 8 0 0 1 16 0z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  clipboard: "<path d='M5 4.6h14v17H5z' fill='#c08b52' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7.2 7h9.6v12.4H7.2z' fill='#fdf4de' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M9 3h6v3.6H9z' fill='#9aa7b0' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M9.2 11h5.6M9.2 14h5.6M9.2 17h3.4' stroke='#3a2913' stroke-width='1.4' stroke-linecap='round'/>",
+  warn: "<path d='M12 2.8 22 20.4H2z' fill='#ffc94d' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 9.4v5.4' stroke='#3a2913' stroke-width='2.4' stroke-linecap='round'/><circle cx='12' cy='17.6' r='1.35' fill='#3a2913'/>",
+  retry: "<path d='M19 12a7 7 0 1 1-2.2-5.1' fill='none' stroke='#3a2913' stroke-width='4.4' stroke-linecap='round'/><path d='M19 12a7 7 0 1 1-2.2-5.1' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round'/><path d='M13.6 6.8h5.4V1.4z' fill='#fff' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  mudRise: "<path d='M2 15.4c2.4 0 2.4-2 4.8-2s2.4 2 4.8 2 2.4-2 4.8-2 2.4 2 5.6 2V22H2z' fill='#7a6552' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M2 19c2.4 0 2.4-1.6 4.8-1.6S9.2 19 11.6 19s2.4-1.6 4.8-1.6S18.8 19 22 19' fill='none' stroke='#b8a88c' stroke-width='1.4' stroke-linecap='round'/><path d='M12 10.6V2.6m0 0L8.8 6M12 2.6 15.2 6' fill='none' stroke='#3a2913' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/>",
+  boulder: "<path d='M6 19.6 3.4 13l3.8-5 6.4-2.4L20 9l1.8 6.4-3.6 4.2z' fill='#a19a8e' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M13.6 5.6 20 9l1.8 6.4-3.6 4.2H12z' fill='#817a6f'/><path d='M6 19.6 3.4 13l3.8-5 6.4-2.4L20 9l1.8 6.4-3.6 4.2z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M7.2 10.6 10.4 9' stroke='#fff' stroke-width='1.4' stroke-linecap='round' opacity='.7'/><path d='M1.4 21.6h21' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/>",
+  bridge: "<path d='M1.8 9.4h20.4v3H1.8z' fill='#d8d1c3' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M5 12.4v5M12 12.4v2.2M19 12.4v5' stroke='#3a2913' stroke-width='2.2' stroke-linecap='round'/><path d='M12 9.4l-1.4 3' stroke='#3a2913' stroke-width='1.5'/><path d='M1.8 19.6c2.2 0 2.2-1.6 4.4-1.6s2.2 1.6 4.4 1.6 2.2-1.6 4.4-1.6 2.2 1.6 4.4 1.6 2 0 2.8-.4' fill='none' stroke='#7a6552' stroke-width='2.6' stroke-linecap='round'/><path d='M8 6.8 12 3.4l4 3.4' fill='none' stroke='#3a2913' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/>",
+  bars: "<path d='M3 5.4h18v5H3z' fill='#e4cf9f' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M3.9 6.3h10v3.2h-10z' fill='#33a852'/><path d='M3 5.4h18v5H3z' fill='none' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='M12 12.6 17.4 15v3.4c0 2.4-2.2 3.8-5.4 4.6-3.2-.8-5.4-2.2-5.4-4.6V15z' fill='#8fb8e6' stroke='#3a2913' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'/><path d='m9.8 17.6 1.6 1.6 3-3.2' fill='none' stroke='#fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/>",
   note: "<path d='M10 17.5V5.2l8-1.7v11.4' fill='none' stroke='#e9eef5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><ellipse cx='7.6' cy='17.6' rx='3.1' ry='2.5' fill='#e9eef5'/><ellipse cx='15.6' cy='15.6' rx='3.1' ry='2.5' fill='#e9eef5'/>",
   speaker: "<path d='M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z' fill='#e9eef5' stroke='#cfd7e2' stroke-width='1.2' stroke-linejoin='round'/><path d='M15.2 9a4.6 4.6 0 0 1 0 6M17.8 6.6a8 8 0 0 1 0 10.8' fill='none' stroke='#e9eef5' stroke-width='1.9' stroke-linecap='round'/>",
   speakerLow: "<path d='M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z' fill='#e9eef5' stroke='#cfd7e2' stroke-width='1.2' stroke-linejoin='round'/><path d='M15.2 9a4.6 4.6 0 0 1 0 6' fill='none' stroke='#e9eef5' stroke-width='1.9' stroke-linecap='round'/>",
-  mute: "<path d='M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z' fill='#f2c7c2' stroke='#a3301c' stroke-width='1.2' stroke-linejoin='round'/><path d='M15.4 9.4l5 5.2M20.4 9.4l-5 5.2' stroke='#a3301c' stroke-width='2.1' stroke-linecap='round'/>",
-  pin: "<path d='M12 22s7-7.1 7-12a7 7 0 1 0-14 0c0 4.9 7 12 7 12z' fill='#e8584b' stroke='#7d241c' stroke-width='1.7' stroke-linejoin='round'/><circle cx='12' cy='9.6' r='2.7' fill='#fff0ec' stroke='#7d241c' stroke-width='1.3'/>",
-  medal: "<circle cx='12' cy='14.6' r='6.4' fill='#ffd25e' stroke='#8a5a12' stroke-width='1.7'/><path d='M8.6 2.4 11 8.6M15.4 2.4 13 8.6' stroke='#4d86c4' stroke-width='2.4' stroke-linecap='round'/><circle cx='12' cy='14.6' r='3' fill='#f0b32e' stroke='#8a5a12' stroke-width='1.2'/>"
+  mute: "<path d='M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z' fill='#f2c7c2' stroke='#a3301c' stroke-width='1.2' stroke-linejoin='round'/><path d='M15.4 9.4l5 5.2M20.4 9.4l-5 5.2' stroke='#a3301c' stroke-width='2.1' stroke-linecap='round'/>"
 };
 function uiIcon(name, extraClass) {
   const body = UI_ICON[name];
@@ -6669,6 +7570,10 @@ function endGame(won, text) {
   // only "Exit Game" is shown.
   const tryAgainBtn = document.getElementById('tryAgainBtn');
   if (tryAgainBtn) tryAgainBtn.style.display = won ? 'none' : 'inline-flex';
+  /* The mirror of Try Again: a winner gets the route on to another town,
+     a loser gets the route back into the same one. */
+  const nextTownBtn = document.getElementById('nextTownBtn');
+  if (nextTownBtn) nextTownBtn.style.display = won ? 'inline-flex' : 'none';
 
   // Final score, letter grade, and a random educational fact — gives the
   // end screen replay value (a number to beat) plus a last bit of teaching
@@ -8025,18 +8930,18 @@ function drawRiverLiveDetail(context) {
 */
 const TOWN_GROUND = {
   bacolor: {
-    stops: ['#a89c86', '#95886f', '#7d715a', '#5f5645'],   // lahar sand
-    tufts: { count: 34, tones: ['#8a8468', '#6f6a52'], height: 4 },
+    stops: ['#d6cbb0', '#c8bb9c', '#b7a988', '#a09172'],   // pale lahar sand
+    tufts: { count: 34, tones: ['#8f9468', '#a8a878'], height: 4 },
     texture: 'lahar'
   },
   porac: {
-    stops: ['#6a8a4e', '#587343', '#455c34', '#334425'],   // cultivated green
-    tufts: { count: 86, tones: ['#4a6b3a', '#6b8f52'], height: 7 },
+    stops: ['#93b863', '#82a857', '#71974b', '#5f8440'],   // farmland green
+    tufts: { count: 86, tones: ['#5f8a3e', '#7fa851'], height: 7 },
     texture: 'fields'
   },
   angeles: {
-    stops: ['#6b7360', '#5a6152', '#474d41', '#343930'],   // urban grey-green
-    tufts: { count: 40, tones: ['#4a5740', '#5d6b4f'], height: 5 },
+    stops: ['#a3b27f', '#95a473', '#869567', '#77865b'],   // verge grass under the city
+    tufts: { count: 40, tones: ['#6f8a4c', '#88a35e'], height: 5 },
     texture: 'urban'
   }
 };
@@ -8171,308 +9076,286 @@ function paintGroundRelief(ctx, stops) {
    and each town gets the physical details that identify it. Everything is
    kept low-contrast so buildings, channels and tools still read on top. */
 function paintGroundTexture(ctx) {
+  /* Per-town ground, redrawn in the same 2D kit as the volcano and the
+     tools: clear shapes, flat colour, crisp edges where an edge is real
+     (a bund, a kerb, a scarp), and dark ink only on objects that sit ON
+     the ground (stones, stumps, buried roofs). The old layers were all
+     painted at 7–20% opacity, which averaged out into a murky wash — it
+     never looked like any particular place.
+       Bacolor — a pale lahar-sand plain: flow lobes with small scarps,
+                 cracked drying pans, stranded boulders, buried gables.
+       Porac   — a patchwork of cane, rice and fallow plots with earth
+                 bunds, a flooded paddy or two, a farm road and a canal.
+       Angeles — a city grid: asphalt streets with kerbs and sidewalks,
+                 blocks of paved lots, yards and grass verges. */
   const g = townGround();
   const rand = mulberry32(9871);
   const R = (a, b) => a + rand() * (b - a);
+  const INK = '#3a2913';
   ctx.save();
-  traceGroundToe(ctx); ctx.clip();   // texture stays on the plain
+  traceGroundToe(ctx); ctx.clip();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
   if (g.texture === 'lahar') {
-    // ---- Bacolor: a valley filled in by successive lahar flows ----
-    // Terraces: each flow settled at its own level, edges lobed not straight.
-    for (let i = 0; i < 8; i++) {
-      const y = 515 + i * R(44, 58);
-      ctx.globalAlpha = R(0.10, 0.2);
-      ctx.fillStyle = i % 2 ? '#c0b295' : '#6b6250';
+    // ---- Bacolor ----
+    // Flow lobes: each lahar settled at its own level, leaving a lobed
+    // front with a small shaded scarp along its downhill edge.
+    for (let i = 0; i < 9; i++) {
+      const y = 505 + i * R(44, 56);
+      const light = i % 2 === 0;
+      const edge = [];
+      for (let x = -10; x <= 560; x += 20) {
+        edge.push([x, y + Math.sin(x * 0.019 + i * 1.7) * 9 + Math.sin(x * 0.052 + i) * 4]);
+      }
+      ctx.globalAlpha = light ? 0.35 : 0.22;
+      ctx.fillStyle = light ? '#e2d7bd' : '#a99a7c';
       ctx.beginPath();
-      ctx.moveTo(-10, y);
-      for (let x = -10; x <= 550; x += 28) {
-        ctx.lineTo(x, y + Math.sin(x * 0.021 + i * 1.7) * 6 + Math.sin(x * 0.007) * 4);
-      }
-      ctx.lineTo(550, y + 22); ctx.lineTo(-10, y + 22);
-      ctx.closePath(); ctx.fill();
-    }
-    /* Dry gullies scoured by run-off after the flow stopped. Kept faint and
-       short: at full length and strength they ran the whole height of the
-       field and read as scratches on the screen rather than channels in
-       the ash. Each one now starts and ends at its own depth, wanders more,
-       and fades out along its length. */
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 9; i++) {
-      let x = R(20, 520);
-      const yStart = R(515, 700), yEnd = yStart + R(70, 210);
-      const grad = ctx.createLinearGradient(0, yStart, 0, yEnd);
-      grad.addColorStop(0, 'rgba(93,84,67,0)');
-      grad.addColorStop(0.35, 'rgba(93,84,67,0.16)');
-      grad.addColorStop(1, 'rgba(93,84,67,0)');
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = R(2, 4.5);
-      let y = yStart;
-      ctx.beginPath(); ctx.moveTo(x, y);
-      while (y < yEnd) {
-        x += R(-13, 13); y += R(16, 30);
-        ctx.lineTo(x, y);
-      }
+      edge.forEach(([x, yy], k) => k ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy));
+      ctx.lineTo(560, y + 40); ctx.lineTo(-10, y + 40); ctx.closePath(); ctx.fill();
+      // scarp line
+      ctx.globalAlpha = 0.45; ctx.strokeStyle = '#8c7d60'; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      edge.forEach(([x, yy], k) => k ? ctx.lineTo(x, yy + 1.5) : ctx.moveTo(x, yy + 1.5));
+      ctx.stroke();
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = '#efe6d0'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      edge.forEach(([x, yy], k) => k ? ctx.lineTo(x, yy - 0.5) : ctx.moveTo(x, yy - 0.5));
       ctx.stroke();
     }
-    // Cracked pans of settled ash.
-    for (let i = 0; i < 26; i++) {
-      const x = R(0, 540), y = R(520, 945), r = R(14, 38);
-      ctx.globalAlpha = R(0.08, 0.18);
-      ctx.fillStyle = '#cabda3';
-      ctx.beginPath(); ctx.ellipse(x, y, r, r * R(0.32, 0.5), R(-0.3, 0.3), 0, Math.PI * 2); ctx.fill();
+    // Wind ripples on the open sand
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = '#f1e9d6'; ctx.lineWidth = 1;
+    for (let i = 0; i < 70; i++) {
+      const x = R(-10, 530), y = R(510, 950), len = R(14, 34);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + len / 2, y - R(1.5, 3), x + len, y); ctx.stroke();
     }
-    // Boulders rafted down and stranded in the deposit.
-    for (let i = 0; i < 16; i++) {
-      const x = R(15, 525), y = R(535, 945), r = R(3.5, 9);
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = '#7d7666';
-      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.35; ctx.fillStyle = '#a29a87';
-      ctx.beginPath(); ctx.ellipse(x - r * 0.25, y - r * 0.3, r * 0.5, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    // Dead stumps left standing where the ash drowned the trees.
-    ctx.globalAlpha = 0.55;
-    for (let i = 0; i < 9; i++) {
-      const x = R(20, 520), y = R(545, 940), h = R(5, 11);
-      ctx.strokeStyle = '#6b5a44'; ctx.lineWidth = R(2, 3.4);
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + R(-2, 2), y - h); ctx.stroke();
-    }
-    // Wind-combed ripples across the open ash.
-    ctx.globalAlpha = 0.07; ctx.strokeStyle = '#e2d8c2'; ctx.lineWidth = 1;
-    for (let i = 0; i < 40; i++) {
-      const x = R(-10, 520), y = R(515, 950), len = R(26, 70);
-      ctx.beginPath(); ctx.moveTo(x, y);
-      ctx.quadraticCurveTo(x + len * 0.5, y - R(1.5, 4), x + len, y);
-      ctx.stroke();
-    }
-    // Roof peaks and wall stubs of the houses the ash swallowed — the
-    // detail Bacolor is actually known for.
-    for (let i = 0; i < 7; i++) {
-      const x = R(30, 505), y = R(560, 930), w = R(13, 26);
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = i % 2 ? '#7a4b3a' : '#5d6470';
-      ctx.beginPath();                       // a gable just breaking the surface
-      ctx.moveTo(x - w, y);
-      ctx.lineTo(x, y - w * R(0.4, 0.62));
-      ctx.lineTo(x + w, y);
-      ctx.closePath(); ctx.fill();
-      ctx.globalAlpha = 0.22; ctx.fillStyle = '#efe6d2';   // ash banked against it
-      ctx.beginPath(); ctx.ellipse(x, y + 2, w * 1.25, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    // Cart and truck ruts pressed into the drying deposit.
-    ctx.globalAlpha = 0.09; ctx.strokeStyle = '#5a5140'; ctx.lineWidth = 1.6;
-    for (let i = 0; i < 5; i++) {
-      const y0 = R(540, 900); let x = R(-10, 200);
-      for (const off of [0, 6]) {
-        let xx = x, yy = y0 + off * 0.4;
-        ctx.beginPath(); ctx.moveTo(xx, yy + off);
-        while (xx < 560) { xx += R(40, 70); yy += R(-9, 9); ctx.lineTo(xx, yy + off); }
+    // Cracked drying pans: a patch of darker silt broken into plates
+    for (let i = 0; i < 12; i++) {
+      const cx = R(25, 515), cy = R(530, 935), rx = R(18, 36), ry = rx * R(0.38, 0.52);
+      ctx.globalAlpha = 0.5; ctx.fillStyle = '#b8a888';
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, R(-0.2, 0.2), 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = '#7f7054'; ctx.lineWidth = 0.9;
+      for (let k = 0; k < 7; k++) {
+        let x = cx + R(-rx, rx), y = cy + R(-ry, ry);
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let s = 0; s < 4; s++) { x += R(-9, 9); y += R(-4, 4); ctx.lineTo(x, y); }
         ctx.stroke();
       }
+      ctx.restore();
     }
-    // Shallow pools left standing in the hollows.
+    // Shallow pools in the hollows, reflecting the sky
+    for (let i = 0; i < 6; i++) {
+      const x = R(30, 510), y = R(540, 930), r = R(10, 20);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#9fb3b0';
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.36, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d8ebe6';
+      ctx.beginPath(); ctx.ellipse(x - r * 0.25, y - r * 0.08, r * 0.45, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8c7d60'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.36, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    // Roofs of the houses the lahar swallowed — what Bacolor is known for
+    for (let i = 0; i < 6; i++) {
+      const x = R(35, 505), y = R(565, 925), w = R(12, 20), h = w * R(0.45, 0.6);
+      const roof = i % 2 ? '#a8543e' : '#7d8a96';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = roof;
+      ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x - w * 0.15, y - h); ctx.lineTo(x + w * 0.15, y - h); ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.moveTo(x + w * 0.15, y - h); ctx.lineTo(x + w, y); ctx.lineTo(x, y); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(x - w, y); ctx.lineTo(x - w * 0.15, y - h); ctx.lineTo(x + w * 0.15, y - h); ctx.lineTo(x + w, y); ctx.stroke();
+      ctx.fillStyle = '#d9cdb1';                                    // sand banked against it
+      ctx.beginPath(); ctx.ellipse(x, y + 1, w * 1.3, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // Stranded boulders and dead stumps, drawn as objects with ink rims
+    for (let i = 0; i < 18; i++) {
+      const x = R(15, 525), y = R(535, 945), r = R(2.5, 6.5);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(80,68,48,0.25)';
+      ctx.beginPath(); ctx.ellipse(x + 1, y + r * 0.55, r * 1.1, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8f887c';
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#b6afa2';
+      ctx.beginPath(); ctx.ellipse(x - r * 0.25, y - r * 0.28, r * 0.5, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.72, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     for (let i = 0; i < 8; i++) {
-      const x = R(20, 520), y = R(540, 935), r = R(8, 20);
-      ctx.globalAlpha = 0.17; ctx.fillStyle = '#8d9a94';
-      ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.4, R(-0.25, 0.25), 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.13; ctx.fillStyle = '#dff0ea';
-      ctx.beginPath(); ctx.ellipse(x - r * 0.2, y - r * 0.1, r * 0.45, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+      const x = R(20, 520), y = R(545, 940), h = R(5, 10);
+      ctx.strokeStyle = INK; ctx.lineWidth = 3.4;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 0.5, y - h); ctx.stroke();
+      ctx.strokeStyle = '#7a6448'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 0.5, y - h); ctx.stroke();
+      ctx.fillStyle = '#d9cdb1';
+      ctx.beginPath(); ctx.ellipse(x, y, 4, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // Truck ruts across the drying deposit
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = '#9a8b6d'; ctx.lineWidth = 1.4;
+    for (let i = 0; i < 3; i++) {
+      const y0 = R(560, 900);
+      for (const off of [0, 5]) {
+        let xx = -10, yy = y0;
+        ctx.beginPath(); ctx.moveTo(xx, yy + off);
+        const r2 = mulberry32(300 + i);
+        while (xx < 560) { xx += 50; yy += (r2() - 0.5) * 16; ctx.lineTo(xx, yy + off); }
+        ctx.stroke();
+      }
     }
 
   } else if (g.texture === 'fields') {
-    /* ---- Porac: cultivated foot-slope plots ----
-       Rewritten. The parcels were axis-aligned fillRects with strokeRect
-       borders and pale headland strips, which read as translucent grey
-       SQUARES laid over the field rather than as farmland — the straight
-       edges and right angles gave them away instantly.
-
-       Real plots on a slope are four-sided but never square: they follow
-       the contour, so the corners are jittered, the sides are not parallel,
-       and the boundaries are soft earth bunds rather than drawn outlines. */
+    // ---- Porac ----
+    const CROPS = [
+      { fill: '#79a24b', row: '#5d8638' },   // sugarcane
+      { fill: '#9dc45c', row: '#7fa844' },   // young rice
+      { fill: '#c7b863', row: '#a9994a' },   // ripening rice
+      { fill: '#b9a071', row: '#9c8458' },   // fallow, ploughed
+      { fill: '#6c9443', row: '#557a33' }    // corn
+    ];
+    let y = 500;
     const plots = [];
-    let y = 508;
-    while (y < 950) {
-      const rowH = R(66, 104);
-      let x = R(-30, -6);
-      while (x < 545) {
-        const pw = R(92, 178);
-        // Each corner is nudged independently, so no two sides are parallel.
-        const j = () => (rand() - 0.5) * 18;
+    while (y < 955) {
+      const rowH = R(62, 96);
+      let x = R(-40, -10);
+      while (x < 555) {
+        const pw = R(88, 170);
+        const j = () => (rand() - 0.5) * 14;
         plots.push({
-          pts: [
-            [x + j(),        y + j()],
-            [x + pw + j(),   y + j() * 0.8],
-            [x + pw + j(),   y + rowH + j()],
-            [x + j() * 0.8,  y + rowH + j()]
-          ],
-          wet: rand() < 0.2,
-          rot: (rand() - 0.5) * 0.05
+          pts: [[x + j(), y + j()], [x + pw + j(), y + j()], [x + pw + j(), y + rowH + j()], [x + j(), y + rowH + j()]],
+          crop: rand() < 0.14 ? null : CROPS[Math.floor(rand() * CROPS.length)],
+          vert: rand() < 0.5
         });
-        x += pw + R(6, 16);
+        x += pw;
       }
-      y += rowH + R(7, 15);
+      y += rowH;
     }
-
-    const tracePlot = (p2) => {
-      ctx.beginPath();
-      ctx.moveTo(p2.pts[0][0], p2.pts[0][1]);
-      for (let k = 1; k < p2.pts.length; k++) ctx.lineTo(p2.pts[k][0], p2.pts[k][1]);
-      ctx.closePath();
-    };
-
-    plots.forEach((p2, i) => {
-      /* A flat tint inside the outline still read as a translucent panel,
-         because the fill stopped dead at the boundary. Each parcel is now
-         filled with a soft radial falloff that reaches zero before its own
-         edge, so there is no visible boundary anywhere — only a gentle
-         variation in the crop colour from plot to plot. */
-      const cx = (p2.pts[0][0] + p2.pts[2][0]) / 2;
-      const cy = (p2.pts[0][1] + p2.pts[2][1]) / 2;
-      const rr = Math.max(Math.abs(p2.pts[2][0] - p2.pts[0][0]),
-                          Math.abs(p2.pts[2][1] - p2.pts[0][1])) * 0.62;
-      const base = p2.wet ? '#8fb6a4' : (i % 2 ? '#7fa65c' : '#5e8042');
-      const peak = p2.wet ? 0.13 : 0.07 + rand() * 0.05;
-      const pg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(12, rr));
-      pg.addColorStop(0, hexToRgba(base, peak));
-      pg.addColorStop(0.6, hexToRgba(base, peak * 0.55));
-      pg.addColorStop(1, hexToRgba(base, 0));
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = pg;
-      tracePlot(p2); ctx.fill();
-
-      // Crop rows, clipped to the parcel so they end at its real edge.
-      ctx.save();
-      tracePlot(p2); ctx.clip();
-      if (!p2.wet) {
-        ctx.globalAlpha = 0.075;
-        ctx.strokeStyle = '#3c5528'; ctx.lineWidth = 1;
-        const vert = i % 3 === 0;
-        const bb = p2.pts.reduce((o, q) => ({
-          x0: Math.min(o.x0, q[0]), y0: Math.min(o.y0, q[1]),
-          x1: Math.max(o.x1, q[0]), y1: Math.max(o.y1, q[1])
-        }), { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+    const trace = p => { ctx.beginPath(); p.pts.forEach(([a, b], k) => k ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath(); };
+    plots.forEach(p => {
+      trace(p);
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = p.crop ? p.crop.fill : '#9cc2c4';           // null = flooded paddy
+      ctx.fill();
+      ctx.save(); trace(p); ctx.clip();
+      const bb = p.pts.reduce((o, q) => ({ x0: Math.min(o.x0, q[0]), y0: Math.min(o.y0, q[1]), x1: Math.max(o.x1, q[0]), y1: Math.max(o.y1, q[1]) }),
+                             { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+      if (p.crop) {
+        ctx.globalAlpha = 0.55; ctx.strokeStyle = p.crop.row; ctx.lineWidth = 1.3;
         ctx.beginPath();
-        if (vert) for (let cx = bb.x0; cx < bb.x1; cx += 8) { ctx.moveTo(cx, bb.y0); ctx.lineTo(cx + 6, bb.y1); }
-        else      for (let cy = bb.y0; cy < bb.y1; cy += 8) { ctx.moveTo(bb.x0, cy); ctx.lineTo(bb.x1, cy + 5); }
+        if (p.vert) for (let cx = bb.x0; cx < bb.x1; cx += 6) { ctx.moveTo(cx, bb.y0); ctx.lineTo(cx + 5, bb.y1); }
+        else        for (let cy = bb.y0; cy < bb.y1; cy += 6) { ctx.moveTo(bb.x0, cy); ctx.lineTo(bb.x1, cy + 4); }
         ctx.stroke();
       } else {
-        ctx.globalAlpha = 0.1; ctx.fillStyle = '#dff1ea';
-        ctx.beginPath();
-        ctx.ellipse((p2.pts[0][0] + p2.pts[2][0]) / 2, (p2.pts[0][1] + p2.pts[2][1]) / 2,
-                    28, 7, p2.rot, 0, Math.PI * 2);
-        ctx.fill();
+        // flooded paddy: sky glints and rows of seedlings
+        ctx.globalAlpha = 0.8; ctx.fillStyle = '#e4f2ef';
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath(); ctx.ellipse(bb.x0 + (bb.x1 - bb.x0) * (0.25 + k * 0.25), bb.y0 + (bb.y1 - bb.y0) * (0.3 + k * 0.2), 14, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#6f9a45';
+        for (let cy = bb.y0 + 6; cy < bb.y1; cy += 9) for (let cx = bb.x0 + 5; cx < bb.x1; cx += 8) ctx.fillRect(cx, cy, 1.4, 2.6);
       }
       ctx.restore();
-
-      /* Bunds: a soft earth ridge along each side, drawn as a faint line
-         that follows the parcel's own irregular outline. No strokeRect,
-         which is what produced the hard right angles. */
-      // Only some parcels carry a visible bund: a boundary drawn around
-      // every single plot is what made the grid read as a drawn lattice.
-      if (i % 3 !== 1) {
-        ctx.globalAlpha = 0.055;
-        ctx.strokeStyle = '#3a4f26';
-        ctx.lineWidth = 1.4;
-        ctx.lineJoin = 'round';
-        tracePlot(p2); ctx.stroke();
-      }
+      // Earth bund round the plot: pale ridge with a shaded lower edge
+      ctx.globalAlpha = 0.85; ctx.strokeStyle = '#cdb98e'; ctx.lineWidth = 2.6;
+      trace(p); ctx.stroke();
+      ctx.globalAlpha = 0.35; ctx.strokeStyle = '#6b5a38'; ctx.lineWidth = 0.9;
+      ctx.save(); ctx.translate(0, 1.6); trace(p); ctx.stroke(); ctx.restore();
     });
-
-    // Dirt footpaths worn between the parcels.
-    ctx.globalAlpha = 0.1; ctx.strokeStyle = '#9c8a5e';
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 4; i++) {
-      let x = R(0, 540), y2 = 505;
-      ctx.lineWidth = R(3, 6);
-      ctx.beginPath(); ctx.moveTo(x, y2);
-      while (y2 < 950) { x += R(-24, 24); y2 += R(48, 78); ctx.lineTo(x, y2); }
-      ctx.stroke();
-    }
-    // Irrigation ditches following the contour.
-    ctx.globalAlpha = 0.12; ctx.strokeStyle = '#7fa79a'; ctx.lineWidth = 2.2;
-    for (let i = 0; i < 3; i++) {
-      const y0 = R(540, 900);
-      ctx.beginPath(); ctx.moveTo(-10, y0);
-      for (let x = -10; x <= 550; x += 45) ctx.lineTo(x, y0 + Math.sin(x * 0.02 + i) * 6);
-      ctx.stroke();
-    }
-    // Cut crop drying in stacks, and stones cleared to the field edges.
-    for (let i = 0; i < 14; i++) {
-      ctx.globalAlpha = 0.34; ctx.fillStyle = '#c9b167';
-      ctx.beginPath(); ctx.ellipse(R(20, 520), R(535, 935), R(4, 8), R(2.5, 4.5), 0, 0, Math.PI * 2); ctx.fill();
-    }
-    for (let i = 0; i < 18; i++) {
-      ctx.globalAlpha = 0.26; ctx.fillStyle = '#6f7568';
-      ctx.beginPath(); ctx.arc(R(15, 525), R(530, 940), R(1.4, 3), 0, Math.PI * 2); ctx.fill();
+    // Farm road winding down the slope
+    const road = [];
+    let rx = R(150, 230);
+    for (let yy = 490; yy <= 970; yy += 40) { road.push([rx, yy]); rx += R(-22, 22); }
+    const strokeRoad = (w, col, a) => {
+      ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.beginPath(); road.forEach(([a1, b1], k) => k ? ctx.lineTo(a1, b1) : ctx.moveTo(a1, b1)); ctx.stroke();
+    };
+    strokeRoad(11, '#7a6440', 0.55);
+    strokeRoad(8.5, '#d4bd8e', 1);
+    strokeRoad(1, '#b39c6e', 0.9);
+    // Irrigation canal along the contour
+    const cy0 = R(700, 760);
+    const canal = [];
+    for (let x = -10; x <= 560; x += 30) canal.push([x, cy0 + Math.sin(x * 0.02) * 8]);
+    const strokeCanal = (w, col, a) => {
+      ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.beginPath(); canal.forEach(([a1, b1], k) => k ? ctx.lineTo(a1, b1) : ctx.moveTo(a1, b1)); ctx.stroke();
+    };
+    strokeCanal(7, '#cdb98e', 1);
+    strokeCanal(4, '#6fa2b0', 1);
+    strokeCanal(1, '#d8eef0', 0.8);
+    // Haystacks, drawn as objects
+    for (let i = 0; i < 9; i++) {
+      const x = R(20, 520), yy = R(530, 930), r = R(4, 6.5);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(60,50,30,0.25)';
+      ctx.beginPath(); ctx.ellipse(x + 1, yy + 1, r * 1.2, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e1c46e';
+      ctx.beginPath(); ctx.moveTo(x - r, yy); ctx.quadraticCurveTo(x - r, yy - r * 1.6, x, yy - r * 1.7); ctx.quadraticCurveTo(x + r, yy - r * 1.6, x + r, yy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c29f48';
+      ctx.beginPath(); ctx.moveTo(x, yy - r * 1.7); ctx.quadraticCurveTo(x + r, yy - r * 1.6, x + r, yy); ctx.lineTo(x + r * 0.2, yy); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(x - r, yy); ctx.quadraticCurveTo(x - r, yy - r * 1.6, x, yy - r * 1.7); ctx.quadraticCurveTo(x + r, yy - r * 1.6, x + r, yy); ctx.closePath(); ctx.stroke();
     }
 
   } else {
-    // ---- Angeles: a built-up grid of blocks and streets ----
-    // Streets first: broken into segments so nothing runs dead straight.
+    // ---- Angeles ----
     const roadsY = [566, 664, 772, 878];
-    ctx.lineCap = 'butt';
-    roadsY.forEach((ry, i) => {
-      const w = R(15, 21);
-      ctx.globalAlpha = 0.22; ctx.fillStyle = '#2f3329';
-      ctx.fillRect(-10, ry, 560, w);
-      ctx.globalAlpha = 0.14; ctx.fillStyle = '#9aa08f';         // kerbs
-      ctx.fillRect(-10, ry - 2, 560, 2);
-      ctx.fillRect(-10, ry + w, 560, 2);
-      ctx.globalAlpha = 0.2; ctx.strokeStyle = '#d9d6c4';        // centre dashes
-      ctx.lineWidth = 1.4; ctx.setLineDash([9, 11]);
-      ctx.beginPath(); ctx.moveTo(-10, ry + w / 2); ctx.lineTo(550, ry + w / 2); ctx.stroke();
-      ctx.setLineDash([]);
-    });
     const roadsX = [78, 214, 356, 470];
-    roadsX.forEach(rx => {
-      const w = R(12, 17);
-      ctx.globalAlpha = 0.2; ctx.fillStyle = '#2f3329';
-      ctx.fillRect(rx, 505, w, 450);
-      ctx.globalAlpha = 0.12; ctx.fillStyle = '#9aa08f';
-      ctx.fillRect(rx - 2, 505, 2, 450);
-      ctx.fillRect(rx + w, 505, 2, 450);
-    });
-    // Paved lots and yards filling the blocks between the streets.
-    for (let i = 0; i < 26; i++) {
-      const x = R(0, 500), y = R(515, 930);
-      ctx.globalAlpha = R(0.06, 0.14);
-      ctx.fillStyle = rand() < 0.5 ? '#8d9285' : '#6f7568';
-      ctx.fillRect(x, y, R(24, 62), R(16, 34));
-    }
-    // Zebra crossings where the streets meet.
-    ctx.globalAlpha = 0.22; ctx.fillStyle = '#d9d6c4';
-    roadsY.forEach(ry => {
-      roadsX.forEach(rx => {
-        if (rand() < 0.45) return;                 // not every junction
-        for (let k = 0; k < 5; k++) ctx.fillRect(rx - 16 + k * 6, ry + 2, 3.4, 14);
-      });
-    });
-    // Parking bays marked out along some frontages.
-    ctx.globalAlpha = 0.15; ctx.strokeStyle = '#cfd3c2'; ctx.lineWidth = 1.2;
-    for (let i = 0; i < 5; i++) {
-      const x = R(20, 420), y = R(530, 920), n = 4 + (rand() * 4 | 0);
-      for (let k = 0; k <= n; k++) {
-        ctx.beginPath(); ctx.moveTo(x + k * 13, y); ctx.lineTo(x + k * 13, y + 17); ctx.stroke();
+    const RW = 16, RXW = 13;
+    // City blocks: paved lots, yards and verges filling the gaps
+    const edgesX = [-10].concat(roadsX.flatMap(x => [x, x + RXW]), [550]);
+    const edgesY = [505].concat(roadsY.flatMap(y => [y, y + RW]), [960]);
+    for (let bi = 0; bi < edgesY.length; bi += 2) {
+      for (let bj = 0; bj < edgesX.length; bj += 2) {
+        const x0 = edgesX[bj] + 4, x1 = edgesX[bj + 1] - 4, y0 = edgesY[bi] + 4, y1 = edgesY[bi + 1] - 4;
+        if (x1 - x0 < 10 || y1 - y0 < 10) continue;
+        let x = x0;
+        while (x < x1) {
+          const lw = Math.min(x1 - x, R(22, 48));
+          const kind = rand();
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = kind < 0.45 ? '#c9c4b5' : kind < 0.75 ? '#9fb672' : '#bda985';
+          ctx.fillRect(x, y0, lw - 2, y1 - y0);
+          ctx.globalAlpha = 0.3; ctx.strokeStyle = '#6c6a5e'; ctx.lineWidth = 0.8;
+          ctx.strokeRect(x + 0.5, y0 + 0.5, lw - 3, y1 - y0 - 1);
+          x += lw;
+        }
       }
-      ctx.beginPath(); ctx.moveTo(x, y + 17); ctx.lineTo(x + n * 13, y + 17); ctx.stroke();
     }
-    // Sidewalk paving, drains and manhole covers.
-    ctx.globalAlpha = 0.09; ctx.strokeStyle = '#b9bcae'; ctx.lineWidth = 1;
-    roadsY.forEach(ry => {
-      for (let x = -6; x < 545; x += 14) {
-        ctx.beginPath(); ctx.moveTo(x, ry - 8); ctx.lineTo(x, ry - 2); ctx.stroke();
-      }
-    });
-    for (let i = 0; i < 12; i++) {
-      const x = R(20, 520), y = R(530, 930);
-      ctx.globalAlpha = 0.2; ctx.fillStyle = '#4a5044';
-      ctx.beginPath(); ctx.ellipse(x, y, R(3, 5), R(1.6, 2.8), 0, 0, Math.PI * 2); ctx.fill();
+    // Streets: asphalt, kerb + sidewalk each side, painted centre line
+    const street = (x, y, w, h, horiz) => {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#d6d1c4';                                   // sidewalk
+      if (horiz) ctx.fillRect(x, y - 4, w, h + 8); else ctx.fillRect(x - 4, y, w + 8, h);
+      ctx.fillStyle = '#55595b';                                   // asphalt
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(58,41,19,0.55)';                        // kerb line
+      if (horiz) { ctx.fillRect(x, y - 0.6, w, 1.2); ctx.fillRect(x, y + h - 0.6, w, 1.2); }
+      else       { ctx.fillRect(x - 0.6, y, 1.2, h); ctx.fillRect(x + w - 0.6, y, 1.2, h); }
+    };
+    roadsX.forEach(x => street(x, 495, RXW, 470, false));
+    roadsY.forEach(y => street(-10, y, 570, RW, true));
+    // Clear the junctions (asphalt over sidewalk), then paint markings
+    ctx.fillStyle = '#55595b';
+    roadsY.forEach(y => roadsX.forEach(x => ctx.fillRect(x - 4, y, RXW + 8, RW)));
+    ctx.strokeStyle = '#f0e6b8'; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.9; ctx.setLineDash([8, 9]);
+    roadsY.forEach(y => { ctx.beginPath(); ctx.moveTo(-10, y + RW / 2); ctx.lineTo(560, y + RW / 2); ctx.stroke(); });
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#eeeae0';
+    roadsY.forEach(y => roadsX.forEach(x => {
+      if (rand() < 0.4) return;
+      for (let k = 0; k < 4; k++) ctx.fillRect(x - 4 + k * 5.4, y - 9, 3, 7);   // zebra
+    }));
+    // Manholes and drains
+    for (let i = 0; i < 10; i++) {
+      const y = roadsY[i % 4] + RW / 2 + R(-3, 3), x = R(20, 520);
+      ctx.fillStyle = '#3f4345';
+      ctx.beginPath(); ctx.ellipse(x, y, 2.6, 1.6, 0, 0, Math.PI * 2); ctx.fill();
     }
   }
   ctx.restore();
 }
+
 
 function cacheStaticElements() {
   staticCanvas.width = canvas.width; staticCanvas.height = canvas.height;
@@ -8593,16 +9476,17 @@ function getSteamVents(channelIndex) {
   if (!STEAM_VENT_CACHE[channelIndex]) {
     const rand = mulberry32(6600 + channelIndex * 97);
     const arr = [];
-    const count = 5;
+    const count = 11;
     for (let i = 0; i < count; i++) {
       arr.push({
-        t: rand(),
-        perp: (rand() - 0.5) * 16,
+        t: 0.04 + rand() * 0.96,
+        perp: (rand() - 0.5) * 18,
         offset: i / count,
-        speed: 0.18 + rand() * 0.12,
-        driftX: (rand() - 0.5) * 10,
-        riseHeight: 20 + rand() * 16,
-        scale: 0.5 + rand() * 0.4
+        speed: 0.16 + rand() * 0.12,
+        driftX: 4 + rand() * 12,          // the storm wind leans every plume the same way
+        riseHeight: 30 + rand() * 26,
+        scale: 0.6 + rand() * 0.5,
+        smoky: rand() < 0.45              // some plumes are grey ash-smoke, not white steam
       });
     }
     STEAM_VENT_CACHE[channelIndex] = arr;
@@ -8750,6 +9634,22 @@ function computeLaharSamples(path, totalLen, progress, wobbleSeed, severT, sever
       const shoulder = Math.min(1, (t - severT) / 0.05); // smooth neck at the dike
       widthMul *= (1 - shoulder * (1 - severFade));
     }
+
+    /* ---- SOURCE TAPER ----
+       widthMul is floored at 0.32, so the very first sample was already a
+       third of full width and the ribbon polygon closed with a straight
+       line across it — a hard flat cap sitting on the crater, which read as
+       a strip of cut paper laid over the mountain.
+
+       Tapering to zero across the first stretch makes the ribbon emerge
+       from a point, so the mud appears to well out of the vent and widen as
+       it runs. Smoothstep rather than linear: a linear taper still leaves a
+       visible corner where the narrowing stops. */
+    const SOURCE_T = 0.055;
+    if (t < SOURCE_T) {
+      const k = Math.max(0, t / SOURCE_T);
+      widthMul *= k * k * (3 - 2 * k);
+    }
     const perpAngle = pt.angle + Math.PI / 2;
     samples.push({
       x: pt.x, y: pt.y, t, angle: pt.angle,
@@ -8852,25 +9752,31 @@ function drawRippleBands(context, path, totalLen, progress, halfWidth, seed, int
     const t = cycle * progress;
     if (t < 0.03 || t > progress * 0.97) continue;
     const pt = pointAtProgress(path, t, totalLen);
-    const alpha = flowFade(cycle) * (0.18 + intensity * 0.22);
-    const hw = halfWidth * (0.55 + 0.25 * Math.sin(ambientTime * 2 + k));
+    const alpha = flowFade(cycle) * (0.3 + intensity * 0.25);
+    const hw = halfWidth * (0.45 + 0.35 * Math.abs(Math.sin(k * 2.3 + seed)));
     context.save();
     context.translate(pt.x, pt.y);
     context.rotate(pt.angle);
-    context.lineCap = 'round';
+    // Crests sit off-centre by varying amounts, so they read as broken
+    // standing waves rather than evenly spaced rings round a tube.
+    context.translate(0, Math.sin(k * 1.7 + seed * 2.3) * halfWidth * 0.3);
     context.globalAlpha = alpha;
-    context.strokeStyle = 'rgba(255,246,228,0.9)';
-    context.lineWidth = 1.5;
-    context.beginPath();
-    context.moveTo(-1, -hw);
-    context.quadraticCurveTo(6, 0, -1, hw);
-    context.stroke();
-    context.strokeStyle = 'rgba(28,20,14,0.9)';
-    context.lineWidth = 2.2;
-    context.beginPath();
-    context.moveTo(-4, -hw * 0.9);
-    context.quadraticCurveTo(3, 0, -4, hw * 0.9);
-    context.stroke();
+    // Trough: a soft dark hollow just upstream of the crest
+    context.fillStyle = 'rgba(40,32,22,0.45)';
+    context.beginPath(); context.ellipse(-3.5, 0, 2.2, hw * 0.85, 0, 0, Math.PI * 2); context.fill();
+    // Crest: a broken line of foam blobs, not a clean ring — clean rings
+    // made the flow read as tree bark.
+    const blobs = 11;
+    for (let j = 0; j < blobs; j++) {
+      const u = (j / (blobs - 1)) * 2 - 1;                 // -1..1 across
+      const gap = Math.sin(k * 3.1 + j * 2.7 + seed);
+      if (gap < -0.55) continue;                          // ragged gaps
+      const bx = (1 - u * u) * 4 + Math.sin(j * 1.9 + k) * 0.8;
+      const by = u * hw;
+      const r = 1.3 + (0.5 + 0.5 * gap) * 1.5;
+      context.fillStyle = gap > 0.3 ? 'rgba(196,186,168,0.55)' : 'rgba(160,148,128,0.45)';
+      context.beginPath(); context.ellipse(bx, by, r * 0.8, r * 1.7, 0, 0, Math.PI * 2); context.fill();
+    }
     context.restore();
   }
   context.globalAlpha = 1;
@@ -8885,9 +9791,11 @@ function drawLaharSnout(context, front, halfWidth, intensity, seed, fadeAlpha, s
   // across the channel (wide, slightly beyond the body so it bulges).
   const rx = (halfWidth * 0.55 + spreadFactor * 6) * lurch;
   const ry = (halfWidth * 1.08 + spreadFactor * 10) * lurch;
-  const dark = lerpColor('#5d554b', '#1f170f', intensity);
-  const body = lerpColor('#8a8275', '#4a3a2c', intensity);
-  const lip  = lerpColor('#b9b0a0', '#7c6a56', intensity);
+  // Same ash-slurry palette as the body: the front is the darkest, most
+  // boulder-choked part of a lahar, with a pale churned lip.
+  const dark = lerpColor('#4a4237', '#2a231a', intensity);
+  const body = lerpColor('#827868', '#5b5042', intensity);
+  const lip  = lerpColor('#cbc1ad', '#a69b85', intensity);
 
   context.save();
   context.translate(front.x, front.y);
@@ -8917,19 +9825,19 @@ function drawLaharSnout(context, front, halfWidth, intensity, seed, fadeAlpha, s
 
   // Tumbling boulders along the lip — each orbits/rotates on its own
   const rand = mulberry32(seed * 31 + 7);
-  const boulders = 4;
+  const boulders = 6;
   for (let b = 0; b < boulders; b++) {
     const lane = (b - (boulders - 1) / 2) / boulders;   // across the front
     const spin = ambientTime * (2.2 + rand() * 1.5) + rand() * 6;
     const bx = rx * (0.55 + 0.25 * rand());          // fixed seat on the lip
-    const by = ry * lane * 1.6 + Math.sin(spin) * 1.5; // bob, but never slide back
+    const by = ry * lane * 1.5 + Math.sin(spin) * 1.5; // bob, but never slide back
     const bs = 2.6 + rand() * 2.4 + intensity * 1.2;
     context.globalAlpha = fadeAlpha * 0.95;
     context.save();
     context.translate(bx, by);
     context.rotate(spin);
-    context.fillStyle = '#5a5047';
-    context.strokeStyle = 'rgba(20,14,8,0.7)';
+    context.fillStyle = b % 2 ? '#6d665d' : '#58514a';
+    context.strokeStyle = '#2b241b';
     context.lineWidth = 1;
     context.beginPath();
     context.moveTo(-bs, -bs * 0.6); context.lineTo(bs * 0.6, -bs); context.lineTo(bs, bs * 0.4); context.lineTo(-bs * 0.4, bs);
@@ -8938,6 +9846,18 @@ function drawLaharSnout(context, front, halfWidth, intensity, seed, fadeAlpha, s
     context.beginPath(); context.arc(-bs * 0.3, -bs * 0.35, bs * 0.35, 0, Math.PI * 2); context.fill();
     context.restore();
   }
+
+  // Smoldering front: a low orange glow where the hot interior shows
+  // through the torn leading edge.
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  const glowA = fadeAlpha * (0.18 + intensity * 0.22) * (0.75 + 0.25 * Math.sin(ambientTime * 4 + seed));
+  const eg = context.createRadialGradient(rx * 0.55, 0, 0, rx * 0.55, 0, ry * 0.9);
+  eg.addColorStop(0, `rgba(255,120,40,${glowA})`);
+  eg.addColorStop(1, 'rgba(255,120,40,0)');
+  context.fillStyle = eg;
+  context.beginPath(); context.ellipse(rx * 0.55, 0, rx * 0.6, ry * 0.9, 0, 0, Math.PI * 2); context.fill();
+  context.restore();
 
   // Mud flung ahead of the wall: short-lived droplets arcing forward
   const drops = 6;
@@ -8967,27 +9887,31 @@ function drawLaharFlow(context) {
   // interpolation layered on the ribbon fill technique, so channel
   // geometry/collision are completely untouched.
   const intensity = state.laharVolume / 100;
-  /* ---- SMOLDERING PALETTE ----
-     The flow now reads as hot volcanic material rather than cold grey mud,
-     but deliberately stays MUD: the layers run dark reddish-brown on the
-     outside and only turn crimson/burnt-orange toward the centre, where a
-     real lahar's hot interior would be. Nothing here is a bright lava
-     yellow — the brightest tone is a burnt orange that only shows at high
-     volume, so a small flow still looks like heavy wet ash.
-
-     Only colours change: widths, samples and geometry are untouched, so
-     collision, pathing and the forward-only movement are unaffected. */
-  /* TONED DOWN. The first pass made the core so wide and saturated that the
-     flow read as bright lava — the thing this must not look like. The crust
-     tones now stay genuinely muddy and the hot tones are darker and far
-     more restrained, so heat shows as seams within dark material rather
-     than as a glowing river. */
-  const outerColor = lerpColor('#544539', '#241811', intensity);   // cool crust
-  const midColor   = lerpColor('#5c4033', '#36201a', intensity);   // dark mud, faint red
-  const innerColor = lerpColor('#6b3c28', '#4d2416', intensity);   // deep reddish-brown
-  const sheenColor = lerpColor('#8a5334', '#7a3316', intensity);   // dull burnt orange
-
-  const leveeColor = lerpColor('#40312a', '#1e120d', intensity);
+  /* ---- ASH-SLURRY PALETTE ----
+     Pinatubo's lahars were rain-driven mudflows of cold-to-warm volcanic
+     ash and sand: grey-khaki slurry the colour and texture of wet concrete,
+     not glowing lava. The earlier reddish-brown body, orange halo and
+     glowing cracks made them read as a lava flow, which is the one thing
+     a lahar is not. Now:
+       - body is grey ash slurry, darker and wetter at high volume
+       - the faster centre is paler (churned, foamy, sky reflecting on it)
+       - banks are dark, soaked ground with a pale sand levee outside it
+       - the surface carries boulders and uprooted trees
+       - steam still rises at high volume: fresh 1991 deposits were hot
+         enough underneath to make many lahars steam as they ran
+     Only colours and surface details change — widths, samples and
+     geometry are untouched, so collision and pathing are unaffected. */
+  // Flat, muddy tones: the surface of a lahar is a churning sheet, not a
+  // rounded tube, so the centre is only a touch lighter than the margin.
+  // SMOLDERING (supervisor request): still mud, but hot. The body runs
+  // darker and charred, with a faint warm cast toward the middle; the heat
+  // itself shows as ember seams and smoke (below), never as a glowing river.
+  const outerColor = lerpColor('#4e4236', '#2e241b', intensity);   // charred margin
+  const midColor   = lerpColor('#645444', '#43342a', intensity);   // hot ash-and-mud slurry
+  const innerColor = lerpColor('#6e5846', '#4f3a2c', intensity);   // warmer centre
+  const sheenColor = lerpColor('#cfc4ae', '#b0a48c', intensity);   // churned foam / wet glint
+  const leveeColor = lerpColor('#3a3024', '#271f16', intensity);   // ink edge
+  const sandLevee  = lerpColor('#d6ccb5', '#b8ad96', intensity);   // pale deposited sand
 
   // Slow flicker for the hot areas. One shared value per frame, so the
   // glow pulses together like a single mass of heat rather than each patch
@@ -9009,66 +9933,132 @@ function drawLaharFlow(context) {
 
     const samples = computeLaharSamples(channelPaths[i], CHANNEL_LENS[i], progress, i * 2.17 + 0.6, severT, severFade);
 
-    // Outer danger-glow halo: hot orange-brown aura that intensifies with lahar volume
-    if (intensity > 0.2) {
-      traceLaharRibbon(context, samples, bodyHalf, 1.48);
-      context.globalAlpha = 0.15 * intensity;
-      context.fillStyle = lerpColor('#c07030', '#ff5500', intensity);
-      context.fill();
-    }
+    // Soaked ground either side of the flow: the mud wets and darkens the
+    // banks before it covers them.
+    traceLaharRibbon(context, samples, bodyHalf, 1.5);
+    context.globalAlpha = 0.16 + 0.1 * intensity;
+    context.fillStyle = '#2e261c';
+    context.fill();
+    // Pale sand levee: the coarse ash a lahar drops along its own edges.
+    traceLaharRibbon(context, samples, bodyHalf, 1.14);
+    context.globalAlpha = 0.32;
+    context.fillStyle = sandLevee;
+    context.fill();
+    context.globalAlpha = 1;
 
     // Base body: soft shadow -> mid mud -> lit core, now shaped as an
     // organic undulating ribbon instead of a constant-width pipe so the
     // banks visibly bulge and narrow like a real viscous flow.
     traceLaharRibbon(context, samples, bodyHalf, 1.0);
-    context.globalAlpha = 0.62; context.fillStyle = outerColor; context.fill();
+    context.globalAlpha = 1; context.fillStyle = outerColor; context.fill();
     context.globalAlpha = 1;
     traceLaharRibbon(context, samples, bodyHalf, 0.71); context.fillStyle = midColor; context.fill();
-    traceLaharRibbon(context, samples, bodyHalf, 0.38); context.fillStyle = innerColor; context.fill();
+    traceLaharRibbon(context, samples, bodyHalf, 0.42); context.fillStyle = innerColor; context.fill();
 
-    /* Molten core: a narrow band of glowing material down the centre of the
-       flow, brightest where the mud is deepest. 'lighter' makes it read as
-       emitted heat rather than painted-on colour, and because it is clipped
-       to the same ribbon it can never spill outside the flow. */
-    if (intensity > 0.12) {
-      context.save();
-      context.globalCompositeOperation = 'lighter';
-      // Narrow and faint: a seam of heat, not a channel of lava.
-      traceLaharRibbon(context, samples, bodyHalf, 0.20);
-      context.globalAlpha = 0.10 * intensity * heatPulse;
-      context.fillStyle = '#7a2708';
-      context.fill();
-      traceLaharRibbon(context, samples, bodyHalf, 0.075);
-      context.globalAlpha = 0.13 * intensity * heatPulse;
-      context.fillStyle = '#b8480f';
-      context.fill();
-      context.restore();
+    /* ---- BREACH POOL ----
+       Tapering the ribbon to a point removed the cut-paper edge, but a bare
+       point reads as a spike stuck on the crater. Real mud does not start
+       at a needle: it collects at the breach and spills over. This is a
+       squat mound of the same mud at the channel head, drawn UNDER the
+       ribbon so the taper disappears into it — the flow then looks like it
+       is welling out of the rim rather than beginning in mid-air. */
+    if (intensity > 0.05) {
+      const head = pointAtProgress(channelPaths[i], 0.012, CHANNEL_LENS[i]);
+      if (head) {
+        /* Sized to just cover the taper, not to sit on the summit. At
+           1.5x bodyHalf these merged into one dark mass across the crater
+           and read worse than the flat cap they replaced. */
+        const rw = bodyHalf * (0.7 + intensity * 0.22);
+        const rh = bodyHalf * (0.3 + intensity * 0.1);
+        context.save();
+        context.translate(head.x, head.y);
+        context.rotate(head.angle + Math.PI / 2);
+        const pg = context.createRadialGradient(0, 0, rw * 0.12, 0, 0, rw);
+        pg.addColorStop(0, hexToRgba(midColor, 0.85));
+        pg.addColorStop(0.55, hexToRgba(outerColor, 0.6));
+        pg.addColorStop(1, hexToRgba(outerColor, 0));
+        context.fillStyle = pg;
+        context.beginPath();
+        context.ellipse(0, 0, rw, rh, 0, 0, Math.PI * 2);
+        context.fill();
+        // A wet lip catching the light where it tips over the edge.
+        context.globalAlpha = 0.22 * intensity;
+        context.fillStyle = sheenColor;
+        context.beginPath();
+        context.ellipse(0, -rh * 0.2, rw * 0.4, rh * 0.28, 0, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+      }
     }
 
-    /* Glowing cracks between the cooler crust plates. Drawn as short
-       segments along the existing sample list, so no extra geometry is
-       generated — a handful of strokes per channel. */
-    if (intensity > 0.2) {
+    /* Churned centre: the middle of a lahar runs fastest and roils, so it
+       carries a paler, broken band of turbulent slurry. Drawn as short
+       patches riding the conveyor so the churn visibly moves downstream. */
+    {
+      const churn = mulberry32(5100 + i * 37);
+      for (let k = 0; k < 26; k++) {
+        const cycle = flowCycle(churn(), 1 + churn() * 0.4);
+        const t = cycle * progress;
+        if (t < 0.05) continue;
+        const pt = pointAtProgress(channelPaths[i], t, CHANNEL_LENS[i]);
+        const off = (churn() - 0.5) * bodyHalf * 1.2;
+        const perp = pt.angle + Math.PI / 2;
+        const len = bodyHalf * (0.3 + churn() * 0.45), wid = bodyHalf * (0.08 + churn() * 0.1);
+        context.save();
+        context.translate(pt.x + Math.cos(perp) * off, pt.y + Math.sin(perp) * off);
+        context.rotate(pt.angle);
+        context.globalAlpha = flowFade(cycle) * (0.16 + 0.1 * intensity);
+        context.fillStyle = sheenColor;
+        context.beginPath(); context.ellipse(0, 0, len, wid, 0, 0, Math.PI * 2); context.fill();
+        context.globalAlpha *= 0.8;
+        context.fillStyle = outerColor;
+        context.beginPath(); context.ellipse(-len * 0.35, wid * 0.9, len * 0.6, wid * 0.45, 0, 0, Math.PI * 2); context.fill();
+        context.restore();
+      }
+      context.globalAlpha = 1;
+    }
+
+    /* ---- SMOLDERING EMBERS ----
+       Hot pumice and charred wood breaking through the crust: short jagged
+       seams that glow orange and flicker, riding downstream with the flow.
+       Each one is a dim wide stroke under a thin bright one, drawn with
+       'lighter' so it reads as emitted heat inside dark mud. Kept small and
+       scattered so the flow is smoldering mud, not lava. */
+    {
+      const er = mulberry32(7700 + i * 53);
       context.save();
       context.globalCompositeOperation = 'lighter';
-      context.lineCap = 'round';
-      for (let k = 2; k < samples.length - 2; k += 3) {
-        const a = samples[k], bS = samples[k + 1];
-        if (!a || !bS) continue;
-        // Deterministic per-segment variation, so cracks sit in fixed places
-        // on the flow instead of crawling about between frames.
-        const wob = Math.sin(k * 2.7 + i * 1.3);
-        const flick = 0.55 + 0.45 * Math.sin(ambientTime * 3.1 + k * 0.9 + i);
-        const off = wob * bodyHalf * 0.34 * a.widthMul;
-        const nx = -(bS.y - a.y), ny = (bS.x - a.x);
-        const nl = Math.hypot(nx, ny) || 1;
-        context.globalAlpha = 0.085 * intensity * flick * heatPulse;
-        context.strokeStyle = wob > 0 ? '#ff7a2a' : '#c93d10';
-        context.lineWidth = 1.6 + Math.abs(wob) * 1.8;
+      context.lineCap = 'round'; context.lineJoin = 'round';
+      const emberStrength = 0.35 + intensity * 0.65;
+      // Warm undertone through the whole body: heat from inside dark mud
+      traceLaharRibbon(context, samples, bodyHalf, 0.7);
+      context.globalAlpha = (0.10 + 0.12 * intensity) * heatPulse;
+      context.fillStyle = '#6a2208';
+      context.fill();
+      for (let k = 0; k < 26; k++) {
+        const baseT = er(), spd = 0.7 + er() * 0.4, side = (er() - 0.5) * 1.3;
+        const len = 6 + er() * 9, seed = er() * 10;
+        const cycle = flowCycle(baseT, spd);
+        const t = cycle * progress;
+        if (t < 0.04) continue;
+        const pt = pointAtProgress(channelPaths[i], t, CHANNEL_LENS[i]);
+        const perp = pt.angle + Math.PI / 2;
+        const off = side * bodyHalf * 0.7;
+        const flick = 0.55 + 0.45 * Math.sin(ambientTime * (3 + seed * 0.4) + seed * 5);
+        const a = flowFade(cycle) * emberStrength * flick * heatPulse;
+        if (a < 0.02) continue;
+        context.save();
+        context.translate(pt.x + Math.cos(perp) * off, pt.y + Math.sin(perp) * off);
+        context.rotate(pt.angle + (er() - 0.5) * 0.9);
         context.beginPath();
-        context.moveTo(a.x + (nx / nl) * off, a.y + (ny / nl) * off);
-        context.lineTo(bS.x + (nx / nl) * off * 0.6, bS.y + (ny / nl) * off * 0.6);
-        context.stroke();
+        context.moveTo(-len / 2, 0);
+        context.lineTo(-len / 6, (er() - 0.5) * 3);
+        context.lineTo(len / 6, (er() - 0.5) * 3);
+        context.lineTo(len / 2, (er() - 0.5) * 2);
+        context.globalAlpha = a * 0.45; context.strokeStyle = '#c2410c'; context.lineWidth = 7; context.stroke();
+        context.globalAlpha = a;        context.strokeStyle = '#ff8a2a'; context.lineWidth = 2.2; context.stroke();
+        context.globalAlpha = a * 0.8;  context.strokeStyle = '#ffd08a'; context.lineWidth = 0.9; context.stroke();
+        context.restore();
       }
       context.restore();
     }
@@ -9079,7 +10069,7 @@ function drawLaharFlow(context) {
     // Bright specular highlight that appears as the flow peaks
     if (intensity > 0.45) {
       context.globalAlpha = 0.07 * intensity * heatPulse;
-      context.fillStyle = '#d99a63';   // warm glint, kept subtle
+      context.fillStyle = '#efe9dc';   // wet glint
       context.fill();
     }
     context.globalAlpha = 1;
@@ -9107,9 +10097,9 @@ function drawLaharFlow(context) {
 
     // Sediment levees: a thin darker line traced along the outer banks,
     // reading as raised deposited material along the flow's edges.
-    context.globalAlpha = 0.5;
+    context.globalAlpha = 0.75;
     context.strokeStyle = leveeColor;
-    context.lineWidth = 1.6;
+    context.lineWidth = 1.5;
     context.beginPath();
     samples.forEach((s, idx) => {
       const hw = bodyHalf * s.widthMul;
@@ -9128,8 +10118,10 @@ function drawLaharFlow(context) {
 
     // Longitudinal flow lines + transverse ripple crests, both riding
     // downstream — the core "this sheet of mud is sliding" cues.
-    drawFlowLines(context, channelPaths[i], CHANNEL_LENS[i], progress, bodyHalf * 0.75, 3100 + i * 77, intensity, 9);
-    drawRippleBands(context, channelPaths[i], CHANNEL_LENS[i], progress, bodyHalf, i + 1, intensity, 6);
+    drawFlowLines(context, channelPaths[i], CHANNEL_LENS[i], progress, bodyHalf * 0.75, 3100 + i * 77, intensity * 0.5, 5);
+    // Standing waves: closely spaced crests are what make a lahar look
+    // fast and turbulent rather than like a sliding sheet.
+    drawRippleBands(context, channelPaths[i], CHANNEL_LENS[i], progress, bodyHalf, i + 1, intensity, 16);
 
     // Mud clumps + foam speckles: revealed progressively as the front
     // advances, with a gentle sinusoidal wobble for a "roiling" feel.
@@ -9153,56 +10145,89 @@ function drawLaharFlow(context) {
     });
     context.globalAlpha = 1;
 
-    // Crust rafts: larger irregular dark chunks drifting on the surface,
-    // slowly rotating in place — reads as settling debris/ash chunks
-    // riding along in the flow, distinct from the fine speckle texture.
+    // Surface debris: boulders and uprooted trees riding the flow. Lahars
+    // from Pinatubo carried both — the boulders roll, the logs turn slowly
+    // as they are carried, and both drift slower than the fine slurry.
     const crusts = getCrustTexture(i);
-    crusts.forEach(c => {
+    crusts.forEach((c, ci) => {
       const cycle = flowCycle(c.t, c.speedMul, intensity);
       const pt = pointAtProgress(channelPaths[i], cycle * progress, CHANNEL_LENS[i]);
       const perpAngle = pt.angle + Math.PI / 2;
-      const px = pt.x + Math.cos(perpAngle) * c.perp;
-      const py = pt.y + Math.sin(perpAngle) * c.perp * 0.6;
-      const alpha = flowFade(cycle) * 0.55;
+      const perpOff = c.perp * (bodyHalf / 20);
+      const px = pt.x + Math.cos(perpAngle) * perpOff;
+      const py = pt.y + Math.sin(perpAngle) * perpOff * 0.6;
+      const alpha = flowFade(cycle);
       if (alpha <= 0.01) return;
       context.save();
       context.translate(px, py);
-      context.rotate(c.rotSeed + ambientTime * c.rotSpeed);
       context.globalAlpha = alpha;
-      context.fillStyle = 'rgba(40,33,26,0.85)';
-      context.beginPath();
-      c.verts.forEach((v, idx) => {
-        const x = Math.cos(v.a) * c.size * v.r, y = Math.sin(v.a) * c.size * v.r * 0.7;
-        if (idx === 0) context.moveTo(x, y); else context.lineTo(x, y);
-      });
-      context.closePath();
-      context.fill();
+      context.lineJoin = 'round';
+      if (ci % 3 === 0) {
+        // Uprooted tree: trunk turning slowly, root ball at one end
+        context.rotate(pt.angle + Math.sin(ambientTime * 0.6 + c.rotSeed) * 0.5 + c.rotSeed * 0.2);
+        const L = c.size * 1.6;
+        context.strokeStyle = '#2b2116'; context.lineWidth = 1;
+        context.fillStyle = '#7a5836';
+        context.beginPath(); context.rect(-L / 2, -1.6, L, 3.2); context.fill(); context.stroke();
+        context.strokeStyle = 'rgba(200,170,120,0.6)'; context.lineWidth = 0.8;
+        context.beginPath(); context.moveTo(-L / 2 + 1, -0.6); context.lineTo(L / 2 - 1, -0.6); context.stroke();
+        context.strokeStyle = '#4a3522'; context.lineWidth = 1.1; context.lineCap = 'round';
+        context.beginPath();
+        for (let r = -2; r <= 2; r++) {                    // splayed roots
+          context.moveTo(L / 2, 0); context.lineTo(L / 2 + 3.5, r * 1.6);
+        }
+        context.moveTo(-L / 4, -1.4); context.lineTo(-L / 4 - 2.5, -4);   // snapped branch
+        context.stroke();
+      } else {
+        // Boulder, rolling: lit top, dark underside, ink rim
+        context.rotate(c.rotSeed + ambientTime * c.rotSpeed * 6);
+        const sz = c.size * 0.55;
+        context.beginPath();
+        c.verts.forEach((v, idx) => {
+          const x = Math.cos(v.a) * sz * v.r, y = Math.sin(v.a) * sz * v.r * 0.8;
+          if (idx === 0) context.moveTo(x, y); else context.lineTo(x, y);
+        });
+        context.closePath();
+        context.fillStyle = '#6d665d';
+        context.fill();
+        context.strokeStyle = '#2b241b'; context.lineWidth = 1; context.stroke();
+        context.fillStyle = 'rgba(235,228,214,0.45)';
+        context.beginPath(); context.ellipse(-sz * 0.25, -sz * 0.3, sz * 0.4, sz * 0.25, -0.4, 0, Math.PI * 2); context.fill();
+        // Slurry piling up against its upstream face
+        context.fillStyle = hexToRgba(sheenColor, 0.55);
+        context.beginPath(); context.ellipse(-sz * 0.9, sz * 0.15, sz * 0.35, sz * 0.8, 0, 0, Math.PI * 2); context.fill();
+      }
       context.restore();
     });
     context.globalAlpha = 1;
 
-    // Steam wisps: at high intensity the mud reads as hot, so a few soft
-    // wisps rise from its surface and drift/fade — ties into the
-    // volcanic theme (hot pyroclastic material mixing with rainwater).
-    if (intensity > 0.45) {
+    // Smoke and steam: the flow smolders the whole time it runs. Grey
+    // ash-smoke and white steam curl up from the surface, swell as they
+    // rise and lean with the storm wind. Stronger with volume.
+    if (intensity > 0.08) {
       const vents = getSteamVents(i);
+      const strength = Math.min(1, 0.35 + intensity * 0.75);
       vents.forEach(v => {
         if (v.t > progress) return;
-        const life = ((ambientTime * v.speed) + v.offset) % 1;
         const pt = pointAtProgress(channelPaths[i], v.t, CHANNEL_LENS[i]);
         const perpAngle = pt.angle + Math.PI / 2;
         const baseX = pt.x + Math.cos(perpAngle) * v.perp;
         const baseY = pt.y + Math.sin(perpAngle) * v.perp * 0.6;
-        const vy = baseY - life * v.riseHeight;
-        const vx = baseX + v.driftX * life;
-        const alpha = Math.min(1, life * 4) * Math.min(1, (1 - life) * 2.5) * ((intensity - 0.45) / 0.55) * 0.35;
-        if (alpha <= 0.01) return;
-        const r = (6 + life * 10) * v.scale;
-        const steamGrad = context.createRadialGradient(vx, vy, 0, vx, vy, r);
-        steamGrad.addColorStop(0, `rgba(230,225,215,${alpha})`);
-        steamGrad.addColorStop(1, 'rgba(230,225,215,0)');
-        context.fillStyle = steamGrad;
-        context.beginPath(); context.arc(vx, vy, r, 0, Math.PI * 2); context.fill();
+        for (let pf = 0; pf < 2; pf++) {                  // two puffs per vent, staggered
+          const life = ((ambientTime * v.speed) + v.offset + pf * 0.5) % 1;
+          const vy = baseY - life * v.riseHeight;
+          const vx = baseX + v.driftX * life * life + Math.sin(life * 5 + v.offset * 9) * 2;
+          const alpha = Math.min(1, life * 5) * Math.min(1, (1 - life) * 2) * strength * (v.smoky ? 0.6 : 0.5);
+          if (alpha <= 0.01) continue;
+          const r = (7 + life * 18) * v.scale;
+          const col = v.smoky ? '118,110,102' : '236,232,224';
+          const g = context.createRadialGradient(vx, vy, 0, vx, vy, r);
+          g.addColorStop(0, `rgba(${col},${alpha})`);
+          g.addColorStop(0.6, `rgba(${col},${alpha * 0.55})`);
+          g.addColorStop(1, `rgba(${col},0)`);
+          context.fillStyle = g;
+          context.beginPath(); context.arc(vx, vy, r, 0, Math.PI * 2); context.fill();
+        }
       });
     }
 
@@ -9212,17 +10237,6 @@ function drawLaharFlow(context) {
     const overFactor = spread.overFactor * reveal, radius = spread.radius;
     if (overFactor > 0 && !severing) {
       const jitter = getFanJitter(i);
-
-      // Outer danger-red halo at high lahar volume — reads as near-lava heat
-      if (intensity > 0.55) {
-        traceDeltaFan(context, front, radius * 1.5, jitter, i * 3.1 + 4);
-        context.globalAlpha = 1;
-        const dangerGrad = context.createRadialGradient(front.x, front.y, 0, front.x, front.y, radius * 1.6);
-        dangerGrad.addColorStop(0, `rgba(190,55,15,${0.24 * overFactor * intensity})`);
-        dangerGrad.addColorStop(1, 'rgba(190,55,15,0)');
-        context.fillStyle = dangerGrad;
-        context.fill();
-      }
 
       // Distributary rivulets — thin braided streams threading outward
       // beyond the main fan body, drawn first so the fan body overlaps
@@ -9889,10 +10903,16 @@ function drawDragPreview(context) {
   if (!valid) {
     context.save();
     context.globalAlpha = 0.9;
-    context.fillStyle = '#f87171';
-    context.font = 'bold 26px Arial';
-    context.textAlign = 'center';
-    context.fillText('✕', x, y - def.radius - 12);
+    // Drawn "no" badge (was a ✕ font glyph, which varied by OS font)
+    const nx = x, ny = y - def.radius - 20;
+    context.beginPath(); context.arc(nx, ny, 11, 0, Math.PI * 2);
+    context.fillStyle = '#de4430'; context.fill();
+    context.lineWidth = 2.2; context.strokeStyle = '#3a2913'; context.stroke();
+    context.lineCap = 'round'; context.lineWidth = 3; context.strokeStyle = '#ffffff';
+    context.beginPath();
+    context.moveTo(nx - 4.5, ny - 4.5); context.lineTo(nx + 4.5, ny + 4.5);
+    context.moveTo(nx + 4.5, ny - 4.5); context.lineTo(nx - 4.5, ny + 4.5);
+    context.stroke();
     context.restore();
   }
 }
@@ -11676,38 +12696,113 @@ const HOUSE_STYLES = [
   }
 ];
 
+/* ---- House sprites: ink outline + cache ----
+   Every house style is drawn once per (style, colour, damage stage) into an
+   offscreen sprite, and given the same dark ink outline as the volcano,
+   tools and HUD — without it the flat-coloured houses sat on the ground
+   like cut-outs. The outline is made by stamping an ink-filled copy of the
+   silhouette in a ring of offsets under the sprite, so every style gets it
+   without touching its drawing code. Houses do not animate internally, so
+   caching also makes a full town cheaper to draw every frame. */
+const HOUSE_SPRITE_CACHE = new Map();
+const HS_W = 150, HS_H = 150, HS_GX = 75, HS_GY = 118, HS_PF = 2.5;
+function getHouseSprite(styleIdx, color, stage, lost) {
+  const key = styleIdx + '|' + color + '|' + stage + '|' + (lost ? 1 : 0);
+  let spr = HOUSE_SPRITE_CACHE.get(key);
+  if (spr) return spr;
+  const style = HOUSE_STYLES[styleIdx];
+  const pw = Math.round(HS_W * HS_PF), ph = Math.round(HS_H * HS_PF);
+  const art = document.createElement('canvas'); art.width = pw; art.height = ph;
+  const a = art.getContext('2d');
+  a.scale(HS_PF, HS_PF);
+  // Same transform drawHouse used: scale about the ground-contact point.
+  const x = HS_GX, gy = HS_GY, y = gy - style.groundOffset;
+  a.translate(x, gy); a.scale(HOUSE_SCALE, HOUSE_SCALE); a.translate(-x, -gy);
+  style.draw(a, x, y, color, lost, stage);
+
+  const sil = document.createElement('canvas'); sil.width = pw; sil.height = ph;
+  const sc = sil.getContext('2d');
+  sc.drawImage(art, 0, 0);
+  sc.globalCompositeOperation = 'source-in';
+  sc.fillStyle = '#3a2913';
+  sc.fillRect(0, 0, pw, ph);
+
+  spr = document.createElement('canvas'); spr.width = pw; spr.height = ph;
+  const o = spr.getContext('2d');
+  const d = 1.15 * HS_PF;                      // ~1.15 scene px of outline
+  for (let k = 0; k < 12; k++) {
+    const ang = (k / 12) * Math.PI * 2;
+    o.drawImage(sil, Math.cos(ang) * d, Math.sin(ang) * d);
+  }
+  o.drawImage(art, 0, 0);
+  HOUSE_SPRITE_CACHE.set(key, spr);
+  return spr;
+}
+
+// A small yard under each house so it stands ON the ground rather than
+// floating over it — its surface matches the town (packed ash in Bacolor,
+// a dirt yard in Porac, a paved lot in Angeles).
+const HOUSE_YARD = {
+  bacolor: { fill: '#e4d9bf', edge: '#a8987a' },
+  porac:   { fill: '#cdb98e', edge: '#8f7a52' },
+  angeles: { fill: '#dcd7ca', edge: '#8e8a7e' }
+};
+function drawHouseYard(context, x, gy) {
+  const town = gameSettings.town;
+  const yd = HOUSE_YARD[town] || HOUSE_YARD.porac;
+  context.save();
+  if (town === 'angeles') {
+    // City lot: a low concrete slab the house stands on
+    context.fillStyle = yd.fill;
+    roundRectCtx(context, x - 25, gy - 3, 50, 7, 2.5); context.fill();
+    context.fillStyle = yd.edge;
+    context.fillRect(x - 24, gy + 2.2, 48, 1.6);
+  } else {
+    // Packed ash (Bacolor) or a swept dirt yard (Porac)
+    context.globalAlpha = 0.9;
+    context.fillStyle = yd.fill;
+    context.beginPath(); context.ellipse(x, gy + 1, 26, 5.5, 0, 0, Math.PI * 2); context.fill();
+  }
+  // contact shadow tight under the walls (not offset, so nothing floats)
+  context.globalAlpha = 1;
+  const cs = context.createRadialGradient(x, gy, 0, x, gy, 22);
+  cs.addColorStop(0, 'rgba(40,30,18,0.32)');
+  cs.addColorStop(1, 'rgba(40,30,18,0)');
+  context.fillStyle = cs;
+  context.beginPath(); context.ellipse(x, gy, 22, 4, 0, 0, Math.PI * 2); context.fill();
+  context.restore();
+}
+
 function drawHouse(h) {
   ctx.save();
   let shakeX = h.shakeT > 0 ? Math.sin(state.time * 40) * 4 * h.shakeT : 0;
   if (h.shakeT > 0) h.shakeT -= 0.04;
   const x = h.x + shakeX, y = h.y;
-  const style = HOUSE_STYLES[(h.style || 0) % HOUSE_STYLES.length];
+  const styleIdx = (h.style || 0) % HOUSE_STYLES.length;
+  const style = HOUSE_STYLES[styleIdx];
   const stage = getDamageStage(h.hp, h.lost);
+  const gy = y + style.groundOffset;
 
-  // Soft, light-directional ground shadow (see drawGroundShadow).
-  drawGroundShadow(ctx, x, y + style.groundOffset, 34, 10);
+  if (stage < 3) drawHouseYard(ctx, h.x, gy);
 
   // Structural tilt for damaged houses (stages 1 & 2)
   if (stage >= 1 && stage < 3) {
     const tiltAngle = stage === 1 ? 0.018 : 0.048;
     const tiltDir = ((h.id || 0) % 2 === 0) ? 1 : -1;
-    ctx.translate(x, y + style.groundOffset);
+    ctx.translate(x, gy);
     ctx.rotate(tiltAngle * tiltDir);
-    ctx.translate(-x, -(y + style.groundOffset));
+    ctx.translate(-x, -gy);
   }
 
   ctx.globalAlpha = stage === 3 ? 0.92 : 1;
-  // Scale the sprite about its ground-contact point so it shrinks upward
-  // and stays planted; debris is drawn inside the same transform so it
-  // scales with the house.
-  ctx.save();
-  const gy = y + style.groundOffset;
-  ctx.translate(x, gy); ctx.scale(HOUSE_SCALE, HOUSE_SCALE); ctx.translate(-x, -gy);
-  style.draw(ctx, x, y, h.color, h.lost, stage);
+  const spr = getHouseSprite(styleIdx, h.color, stage, h.lost);
+  ctx.drawImage(spr, x - HS_GX, gy - HS_GY, HS_W, HS_H);
   if (stage >= 2) {
-    drawStructureDebris(ctx, x, y + style.groundOffset, stage, (h.id || 1) * 997 + 31);
+    ctx.save();
+    ctx.translate(x, gy); ctx.scale(HOUSE_SCALE, HOUSE_SCALE); ctx.translate(-x, -gy);
+    drawStructureDebris(ctx, x, gy, stage, (h.id || 1) * 997 + 31);
+    ctx.restore();
   }
-  ctx.restore();
 
   // HP bar is NOT scaled — it stays a consistent, readable size across the
   // town — but its height above the house tracks the smaller sprite.
@@ -12117,223 +13212,297 @@ function drawToolEffects(context) {
    (0..1, 1 = pristine) lets a barrier visibly degrade — sagging, split
    seams, spalled concrete — before it finally fails. */
 function drawItemShape(context, type, wear = 1, grow = 1) {
+  /* The four tools, drawn in the same 2D kit as the rest of the scene:
+     one ink outline round every part, flat colour with a single step of
+     shade on the side away from the sun (upper-left light), and one small
+     highlight. The toolbox cards render THIS function to an image (see
+     toolIconHTML), so the card a player taps is pixel-for-pixel the thing
+     that lands on the map. */
   const w = Math.max(0, Math.min(1, wear));
+  const INK = '#3a2913';
+  context.save();
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
   switch (type) {
     case 'sandbag': {
-      // A stacked wall of individual burlap sacks (3 + 2 + 1), tied at the
-      // neck, with woven texture and a wet mud line where the flow reaches.
+      // Burlap sacks stacked 3-2-1, tied at the neck. A worn wall loses its
+      // top sack, the rest slump and tilt, and the front bag splits open.
       const rows = [
         { n: 3, y: 8, s: 1.0 },
-        { n: 2, y: -1, s: 0.94 },
-        { n: 1, y: -9, s: 0.88 }
+        { n: 2, y: -1.5, s: 0.95 },
+        { n: 1, y: -10.5, s: 0.9 }
       ];
-      // Contact shadow
-      context.fillStyle = 'rgba(30,24,16,0.28)';
-      context.beginPath(); context.ellipse(0, 14, 26, 6, 0, 0, Math.PI * 2); context.fill();
-
+      context.fillStyle = 'rgba(30,24,16,0.3)';
+      context.beginPath(); context.ellipse(1, 14.5, 27, 5.5, 0, 0, Math.PI * 2); context.fill();
       rows.forEach((row, ri) => {
-        // A worn wall loses its top course and slumps
         if (w < 0.34 && ri === 2) return;
         for (let i = 0; i < row.n; i++) {
-          const bw = 11 * row.s, bh = 7.5 * row.s;
-          const bx = (i - (row.n - 1) / 2) * (bw * 1.85);
+          const bw = 11 * row.s, bh = 7.6 * row.s;
+          const bx = (i - (row.n - 1) / 2) * (bw * 1.82);
           const sag = (1 - w) * (ri + 1) * 1.6;
           const by = row.y + sag + (i % 2 ? 0.6 : 0);
           const tilt = (1 - w) * ((i % 2 ? 1 : -1) * 0.16) + (i - (row.n - 1) / 2) * 0.05;
           context.save();
           context.translate(bx, by);
           context.rotate(tilt);
-          // Sack body
-          context.fillStyle = ri === 2 ? '#e0bd7c' : (ri === 1 ? '#d9b56b' : '#c9a45c');
-          context.strokeStyle = '#8f6d33'; context.lineWidth = 1.4;
+          const sack = () => {
+            context.beginPath();
+            context.moveTo(-bw, 0.4);
+            context.bezierCurveTo(-bw * 1.02, -bh * 1.05, bw * 0.95, -bh * 1.1, bw, -0.2);
+            context.bezierCurveTo(bw * 1.02, bh * 1.02, -bw * 0.98, bh * 1.05, -bw, 0.4);
+            context.closePath();
+          };
+          sack();
+          context.fillStyle = ri === 2 ? '#e6c585' : '#dcb872';
+          context.fill();
+          // Cel shade: the lower-right half of the sack
+          context.save();
+          sack(); context.clip();
+          context.fillStyle = '#b8914c';
           context.beginPath();
-          context.moveTo(-bw, 0);
-          context.bezierCurveTo(-bw, -bh, bw, -bh, bw, 0);
-          context.bezierCurveTo(bw, bh, -bw, bh, -bw, 0);
+          context.ellipse(bw * 0.25, bh * 0.75, bw * 1.1, bh * 0.75, -0.12, 0, Math.PI * 2);
+          context.fill();
+          // Burlap weave
+          context.strokeStyle = 'rgba(110,78,30,0.35)'; context.lineWidth = 0.7;
+          for (let k = -2; k <= 2; k++) {
+            context.beginPath(); context.moveTo(k * bw * 0.4, -bh); context.lineTo(k * bw * 0.4 + 1, bh); context.stroke();
+          }
+          context.restore();
+          // Stitched seam across the middle
+          context.strokeStyle = 'rgba(90,62,24,0.8)'; context.lineWidth = 0.9;
+          context.setLineDash([1.6, 1.6]);
+          context.beginPath(); context.moveTo(-bw * 0.8, -0.6); context.quadraticCurveTo(0, 0.8, bw * 0.8, -0.6); context.stroke();
+          context.setLineDash([]);
+          sack();
+          context.strokeStyle = INK; context.lineWidth = 1.5; context.stroke();
+          // Tied neck, twine wrapped
+          context.fillStyle = '#dcb872';
+          context.beginPath();
+          context.moveTo(bw * 0.72, -bh * 0.55);
+          context.quadraticCurveTo(bw * 1.25, -bh * 0.95, bw * 1.3, -bh * 0.3);
+          context.quadraticCurveTo(bw * 1.1, -bh * 0.1, bw * 0.9, -bh * 0.1);
           context.closePath();
           context.fill(); context.stroke();
-          // Burlap weave
-          context.strokeStyle = 'rgba(120,88,36,0.35)'; context.lineWidth = 0.7;
-          for (let k = -2; k <= 2; k++) {
-            context.beginPath();
-            context.moveTo(k * bw * 0.4, -bh * 0.72); context.lineTo(k * bw * 0.4, bh * 0.72);
-            context.stroke();
-          }
-          context.beginPath(); context.moveTo(-bw * 0.85, 0); context.lineTo(bw * 0.85, 0); context.stroke();
-          // Tied neck
-          context.strokeStyle = '#7d5a28'; context.lineWidth = 1.6;
-          context.beginPath(); context.moveTo(bw * 0.55, -bh * 0.5); context.lineTo(bw * 0.95, -bh * 0.15); context.stroke();
-          // Top-left light
-          context.fillStyle = 'rgba(255,244,214,0.35)';
-          context.beginPath(); context.ellipse(-bw * 0.32, -bh * 0.36, bw * 0.36, bh * 0.3, -0.3, 0, Math.PI * 2); context.fill();
-          // Split seam on a failing bag
-          if (w < 0.5 && i === 0) {
-            context.strokeStyle = 'rgba(60,40,14,0.75)'; context.lineWidth = 1.2;
-            context.beginPath(); context.moveTo(-bw * 0.5, -bh * 0.2); context.lineTo(0, bh * 0.35); context.stroke();
+          context.strokeStyle = '#a3402c'; context.lineWidth = 1.4;
+          context.beginPath(); context.moveTo(bw * 0.8, -bh * 0.62); context.lineTo(bw * 0.98, -bh * 0.18); context.stroke();
+          // Highlight
+          context.fillStyle = 'rgba(255,246,220,0.6)';
+          context.beginPath(); context.ellipse(-bw * 0.45, -bh * 0.45, bw * 0.28, bh * 0.16, -0.3, 0, Math.PI * 2); context.fill();
+          // Split seam on a failing bag, spilling sand
+          if (w < 0.5 && i === 0 && ri === 0) {
+            context.fillStyle = '#e9d6a6';
+            context.beginPath(); context.ellipse(-bw * 0.2, bh * 0.9, bw * 0.5, bh * 0.3, 0, 0, Math.PI * 2); context.fill();
+            context.strokeStyle = INK; context.lineWidth = 1.3;
+            context.beginPath(); context.moveTo(-bw * 0.55, -bh * 0.2); context.lineTo(-bw * 0.15, bh * 0.2); context.lineTo(bw * 0.05, bh * 0.6); context.stroke();
           }
           context.restore();
         }
       });
-      // Damp mud line along the base
+      // Wet mud line at the foot
       context.fillStyle = 'rgba(74,58,40,0.4)';
-      context.beginPath(); context.ellipse(0, 13, 24, 4, 0, 0, Math.PI * 2); context.fill();
+      context.beginPath(); context.ellipse(0, 14, 24, 3.2, 0, 0, Math.PI * 2); context.fill();
       break;
     }
 
     case 'shovel': {
-      // Spade standing in a heap of freshly dug earth (only ever drawn in
-      // the placement preview — the tool itself is consumed on use).
-      context.fillStyle = '#6b4a28';
-      context.beginPath(); context.ellipse(2, 14, 17, 6, 0, 0, Math.PI * 2); context.fill();
-      context.fillStyle = '#8a6136';
-      context.beginPath(); context.ellipse(-1, 12, 12, 4.5, 0, 0, Math.PI * 2); context.fill();
+      // Spade standing in a heap of fresh earth (placement preview only —
+      // the tool itself is consumed on use).
+      context.fillStyle = 'rgba(30,24,16,0.3)';
+      context.beginPath(); context.ellipse(2, 17, 19, 4.5, 0, 0, Math.PI * 2); context.fill();
+      const mound = () => {
+        context.beginPath();
+        context.moveTo(-17, 16);
+        context.bezierCurveTo(-14, 6, 12, 5, 19, 16);
+        context.closePath();
+      };
+      mound(); context.fillStyle = '#7a5433'; context.fill();
+      context.save(); mound(); context.clip();
+      context.fillStyle = '#5c3e24';
+      context.beginPath(); context.ellipse(12, 16, 12, 7, 0, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#9c7048';
+      context.beginPath(); context.ellipse(-7, 9, 7, 2.2, -0.1, 0, Math.PI * 2); context.fill();
+      context.restore();
+      mound(); context.strokeStyle = INK; context.lineWidth = 1.5; context.stroke();
+      // Clods
+      [[-12, 16, 2.2], [15, 15.5, 1.8], [-4, 16.5, 1.6]].forEach(([cx, cy, r]) => {
+        context.fillStyle = '#6a4a2c';
+        context.beginPath(); context.arc(cx, cy, r, 0, Math.PI * 2); context.fill(); context.stroke();
+      });
       context.save();
-      context.rotate(-0.18);
-      // Shaft with grain
-      context.fillStyle = '#a9784a'; context.strokeStyle = '#6f4a26'; context.lineWidth = 1.2;
-      context.beginPath(); context.rect(-2.5, -24, 5, 28); context.fill(); context.stroke();
-      context.strokeStyle = 'rgba(90,58,26,0.5)'; context.lineWidth = 0.6;
-      context.beginPath(); context.moveTo(-0.6, -22); context.lineTo(-0.6, 2); context.stroke();
-      // D-grip handle
-      context.strokeStyle = '#6f4a26'; context.lineWidth = 2.4;
-      context.beginPath(); context.moveTo(-5, -24); context.quadraticCurveTo(0, -32, 5, -24); context.stroke();
-      context.strokeStyle = '#a9784a'; context.lineWidth = 1.2;
-      context.beginPath(); context.moveTo(-3.5, -26); context.lineTo(3.5, -26); context.stroke();
-      // Steel blade
-      context.fillStyle = '#b9c2c9'; context.strokeStyle = '#6d777f'; context.lineWidth = 1.4;
-      context.beginPath();
-      context.moveTo(-8, 3); context.lineTo(8, 3);
-      context.quadraticCurveTo(9, 14, 0, 18);
-      context.quadraticCurveTo(-9, 14, -8, 3);
-      context.closePath(); context.fill(); context.stroke();
-      context.fillStyle = 'rgba(255,255,255,0.5)';
-      context.beginPath(); context.ellipse(-3, 8, 2.4, 5, -0.25, 0, Math.PI * 2); context.fill();
-      context.fillStyle = 'rgba(90,64,32,0.55)';   // caked soil on the blade tip
-      context.beginPath(); context.ellipse(1, 15, 6, 3, 0, 0, Math.PI * 2); context.fill();
+      context.translate(1, 6);
+      context.rotate(-0.2);
+      // Shaft
+      context.beginPath(); context.rect(-2.4, -32, 4.8, 30);
+      context.fillStyle = '#c08b52'; context.fill();
+      context.fillStyle = '#9a6a38'; context.fillRect(0.6, -32, 1.8, 30);
+      context.beginPath(); context.rect(-2.4, -32, 4.8, 30);
+      context.strokeStyle = INK; context.lineWidth = 1.4; context.stroke();
+      // D-grip
+      context.lineWidth = 4.6; context.strokeStyle = INK;
+      context.beginPath(); context.moveTo(-5.5, -32); context.quadraticCurveTo(0, -42, 5.5, -32); context.lineTo(-5.5, -32); context.stroke();
+      context.lineWidth = 2; context.strokeStyle = '#c08b52';
+      context.beginPath(); context.moveTo(-5.5, -32); context.quadraticCurveTo(0, -42, 5.5, -32); context.lineTo(-5.5, -32); context.stroke();
+      // Steel collar
+      context.beginPath(); context.rect(-3.4, -4, 6.8, 4);
+      context.fillStyle = '#7d8a93'; context.fill(); context.lineWidth = 1.3; context.strokeStyle = INK; context.stroke();
+      // Blade, half-buried in the heap
+      const blade = () => {
+        context.beginPath();
+        context.moveTo(-8.5, 0); context.lineTo(8.5, 0);
+        context.quadraticCurveTo(9.5, 10, 0, 15);
+        context.quadraticCurveTo(-9.5, 10, -8.5, 0);
+        context.closePath();
+      };
+      blade(); context.fillStyle = '#d3dade'; context.fill();
+      context.save(); blade(); context.clip();
+      context.fillStyle = '#9aa7b0'; context.fillRect(1.5, 0, 10, 16);
+      context.fillStyle = '#6b4a2c'; context.beginPath(); context.ellipse(0, 14, 10, 4.5, 0, 0, Math.PI * 2); context.fill();
+      context.restore();
+      blade(); context.strokeStyle = INK; context.lineWidth = 1.5; context.stroke();
+      context.fillStyle = 'rgba(255,255,255,0.85)';
+      context.beginPath(); context.ellipse(-4.5, 4.5, 1.2, 3.2, -0.15, 0, Math.PI * 2); context.fill();
       context.restore();
       break;
     }
 
     case 'tree': {
-      // Narra/acacia sapling that fills out into a broad shade canopy as it
-      // matures. `grow` 0..1 drives trunk height and canopy spread.
+      // A narra sapling that fills out into a broad canopy as it matures.
+      // `grow` 0..1 drives trunk height and canopy spread.
       const g = Math.max(0.18, Math.min(1, grow));
-      context.fillStyle = 'rgba(30,40,20,0.26)';
-      context.beginPath(); context.ellipse(2, 17, 15 * g + 4, 5, 0, 0, Math.PI * 2); context.fill();
-      // Root flare + tapered trunk
+      context.fillStyle = 'rgba(30,40,20,0.3)';
+      context.beginPath(); context.ellipse(2, 17.5, 15 * g + 5, 4.5, 0, 0, Math.PI * 2); context.fill();
       const th = 12 + 10 * g;
-      context.fillStyle = '#7a5230';
-      context.beginPath();
-      context.moveTo(-4.5 - g, 18);
-      context.quadraticCurveTo(-2, 8, -1.8, 18 - th);
-      context.lineTo(1.8, 18 - th);
-      context.quadraticCurveTo(2, 8, 4.5 + g, 18);
-      context.closePath(); context.fill();
-      context.strokeStyle = 'rgba(48,30,14,0.45)'; context.lineWidth = 0.8;
-      context.beginPath(); context.moveTo(-0.8, 16); context.lineTo(-0.8, 18 - th * 0.9); context.stroke();
+      // Trunk with root flare
+      const trunk = () => {
+        context.beginPath();
+        context.moveTo(-5 - g, 18);
+        context.quadraticCurveTo(-2, 9, -2, 18 - th);
+        context.lineTo(2, 18 - th);
+        context.quadraticCurveTo(2, 9, 5 + g, 18);
+        context.closePath();
+      };
+      trunk(); context.fillStyle = '#9a6a3c'; context.fill();
+      context.save(); trunk(); context.clip();
+      context.fillStyle = '#6e4724'; context.fillRect(0.4, 18 - th, 8, th);
+      context.restore();
+      trunk(); context.strokeStyle = INK; context.lineWidth = 1.4; context.stroke();
       // Branches
-      context.strokeStyle = '#6b4526'; context.lineWidth = 2 * g + 0.6; context.lineCap = 'round';
+      context.strokeStyle = INK; context.lineWidth = 2.2 * g + 1.6;
       context.beginPath();
-      context.moveTo(0, 18 - th * 0.72); context.lineTo(-7 * g, 18 - th * 1.05);
-      context.moveTo(0, 18 - th * 0.82); context.lineTo(7 * g, 18 - th * 1.1);
+      context.moveTo(0, 18 - th * 0.7); context.lineTo(-7 * g, 18 - th * 1.05);
+      context.moveTo(0, 18 - th * 0.8); context.lineTo(7 * g, 18 - th * 1.1);
       context.stroke();
-      // Canopy: overlapping leaf clusters, lit from the upper left
+      context.strokeStyle = '#8a5d33'; context.lineWidth = 2.2 * g;
+      context.stroke();
+      // Canopy: one silhouette of overlapping leaf clusters. Stroked thick
+      // in ink first, then filled, so the outline wraps the whole crown
+      // instead of every circle.
       const cy = 18 - th - 5 * g, R = 13 * g + 3;
       const blobs = [
-        [-R * 0.72, cy + R * 0.30, R * 0.66, '#2f6b34'],
-        [ R * 0.74, cy + R * 0.26, R * 0.64, '#2f6b34'],
-        [-R * 0.16, cy + R * 0.52, R * 0.72, '#37793c'],
-        [ R * 0.30, cy - R * 0.22, R * 0.74, '#3f8a46'],
-        [-R * 0.34, cy - R * 0.34, R * 0.78, '#4d9a55'],
-        [-R * 0.62, cy - R * 0.60, R * 0.46, '#63b768']
+        [-R * 0.72, cy + R * 0.28, R * 0.62], [R * 0.72, cy + R * 0.26, R * 0.62],
+        [-R * 0.1, cy + R * 0.45, R * 0.66], [R * 0.3, cy - R * 0.25, R * 0.72],
+        [-R * 0.38, cy - R * 0.3, R * 0.74], [R * 0.05, cy - R * 0.72, R * 0.5]
       ];
-      blobs.forEach(([bx, by, br, col]) => {
-        context.fillStyle = col;
-        context.beginPath(); context.arc(bx, by, br, 0, Math.PI * 2); context.fill();
-      });
-      // Leaf scallops around the rim so the canopy doesn't read as circles
-      context.fillStyle = '#4d9a55';
-      for (let a = 0; a < 9; a++) {
-        const ang = (a / 9) * Math.PI * 2 - 0.4;
+      const crown = () => {
         context.beginPath();
-        context.ellipse(Math.cos(ang) * R * 0.92, cy + Math.sin(ang) * R * 0.62, R * 0.26, R * 0.18, ang, 0, Math.PI * 2);
-        context.fill();
-      }
-      context.fillStyle = 'rgba(190,232,150,0.42)';
-      context.beginPath(); context.ellipse(-R * 0.42, cy - R * 0.5, R * 0.42, R * 0.28, -0.4, 0, Math.PI * 2); context.fill();
-      // A sapling still wears its nursery stake
+        blobs.forEach(([bx, by, br]) => { context.moveTo(bx + br, by); context.arc(bx, by, br, 0, Math.PI * 2); });
+      };
+      crown(); context.strokeStyle = INK; context.lineWidth = 3; context.stroke();
+      crown(); context.fillStyle = '#4f9a4f'; context.fill();
+      context.save(); crown(); context.clip();
+      context.fillStyle = '#35753a';                       // shade, lower right
+      context.beginPath(); context.ellipse(R * 0.45, cy + R * 0.55, R * 1.05, R * 0.72, -0.35, 0, Math.PI * 2); context.fill();
+      context.fillStyle = '#74bf62';                       // lit, upper left
+      context.beginPath(); context.ellipse(-R * 0.45, cy - R * 0.5, R * 0.62, R * 0.4, -0.4, 0, Math.PI * 2); context.fill();
+      context.strokeStyle = 'rgba(35,70,35,0.55)'; context.lineWidth = 1;   // inner leaf clumps
+      [[-R * 0.2, cy + R * 0.1], [R * 0.45, cy - R * 0.05], [-R * 0.6, cy + R * 0.2]].forEach(([lx, ly]) => {
+        context.beginPath(); context.arc(lx, ly, R * 0.28, Math.PI * 0.15, Math.PI * 0.85); context.stroke();
+      });
+      context.restore();
+      // A sapling still wears its nursery stake and tie
       if (g < 0.75) {
-        context.strokeStyle = '#8a7a52'; context.lineWidth = 1.4;
-        context.beginPath(); context.moveTo(6, 18); context.lineTo(5, 18 - th - 2); context.stroke();
-        context.strokeStyle = '#c05a3a'; context.lineWidth = 1.2;
-        context.beginPath(); context.moveTo(1, 18 - th * 0.6); context.lineTo(6, 18 - th * 0.6); context.stroke();
+        context.strokeStyle = INK; context.lineWidth = 2.6;
+        context.beginPath(); context.moveTo(7, 18); context.lineTo(6, 18 - th - 1); context.stroke();
+        context.strokeStyle = '#c9ab72'; context.lineWidth = 1.2;
+        context.beginPath(); context.moveTo(7, 18); context.lineTo(6, 18 - th - 1); context.stroke();
+        context.strokeStyle = '#c0453a'; context.lineWidth = 1.4;
+        context.beginPath(); context.moveTo(1.5, 18 - th * 0.55); context.lineTo(6.4, 18 - th * 0.55); context.stroke();
       }
       break;
     }
 
     case 'dam': {
-      // Concrete flood dike: a battered (sloping) wall on a riprap toe,
-      // with buttress ribs, a capping beam and weep holes — the sabo-dam
-      // style embankment built across Pinatubo's channels.
-      context.fillStyle = 'rgba(30,26,18,0.3)';
-      context.beginPath(); context.ellipse(0, 17, 32, 6, 0, 0, Math.PI * 2); context.fill();
-      // Riprap boulder toe
+      // Concrete sabo-style dike: a battered wall on a riprap toe with
+      // buttress ribs, weep holes, and a hazard-striped capping beam.
+      context.fillStyle = 'rgba(30,26,18,0.32)';
+      context.beginPath(); context.ellipse(0, 17.5, 33, 5, 0, 0, Math.PI * 2); context.fill();
       const rr = mulberry32(4242);
       for (let i = 0; i < 9; i++) {
-        const bx = -30 + i * 7.4 + (rr() - 0.5) * 3, by = 13 + (rr() - 0.5) * 3;
-        const bs = 3.4 + rr() * 2.4;
-        context.fillStyle = i % 2 ? '#7d766c' : '#918a7e';
-        context.strokeStyle = '#4f4a42'; context.lineWidth = 0.9;
-        context.beginPath(); context.ellipse(bx, by, bs, bs * 0.75, rr() * 3, 0, Math.PI * 2);
-        context.fill(); context.stroke();
+        const bx = -30 + i * 7.4 + (rr() - 0.5) * 3, by = 14 + (rr() - 0.5) * 2.5;
+        const bs = 3.6 + rr() * 2.2, rot = rr() * 3;
+        context.beginPath(); context.ellipse(bx, by, bs, bs * 0.72, rot, 0, Math.PI * 2);
+        context.fillStyle = i % 2 ? '#8a8378' : '#a19a8e'; context.fill();
+        context.strokeStyle = INK; context.lineWidth = 1.2; context.stroke();
+        context.fillStyle = 'rgba(255,255,255,0.35)';
+        context.beginPath(); context.ellipse(bx - bs * 0.3, by - bs * 0.3, bs * 0.35, bs * 0.2, 0, 0, Math.PI * 2); context.fill();
       }
-      // Battered wall face
-      context.fillStyle = '#c9c2b6'; context.strokeStyle = '#6f695e'; context.lineWidth = 1.8;
-      context.beginPath();
-      context.moveTo(-30, 14); context.lineTo(-25, -12); context.lineTo(25, -12); context.lineTo(30, 14);
-      context.closePath(); context.fill(); context.stroke();
-      // Form-board courses
-      context.strokeStyle = 'rgba(90,84,74,0.35)'; context.lineWidth = 0.9;
-      for (let ly = -6; ly < 14; ly += 6) {
-        const inset = (14 - ly) / 26 * 5;
-        context.beginPath(); context.moveTo(-30 + inset, ly); context.lineTo(30 - inset, ly); context.stroke();
-      }
-      // Buttress ribs
-      context.fillStyle = '#a9a196';
-      [-17, 0, 17].forEach(bx => {
+      const wall = () => {
         context.beginPath();
-        context.moveTo(bx - 4, 14); context.lineTo(bx - 3, -12); context.lineTo(bx + 3, -12); context.lineTo(bx + 4, 14);
-        context.closePath(); context.fill();
+        context.moveTo(-30, 13); context.lineTo(-25, -12); context.lineTo(25, -12); context.lineTo(30, 13);
+        context.closePath();
+      };
+      wall(); context.fillStyle = '#d8d1c3'; context.fill();
+      context.save(); wall(); context.clip();
+      context.fillStyle = '#b5ad9e';                        // shaded right third
+      context.beginPath(); context.moveTo(10, -12); context.lineTo(40, -12); context.lineTo(40, 14); context.lineTo(14, 14); context.closePath(); context.fill();
+      context.strokeStyle = 'rgba(90,84,74,0.4)'; context.lineWidth = 0.9;   // form-board courses
+      for (let ly = -5; ly < 13; ly += 6) { context.beginPath(); context.moveTo(-31, ly); context.lineTo(31, ly); context.stroke(); }
+      [-17, 0, 17].forEach(bx => {                           // buttress ribs
+        context.beginPath();
+        context.moveTo(bx - 4.2, 14); context.lineTo(bx - 3, -12); context.lineTo(bx + 3, -12); context.lineTo(bx + 4.2, 14);
+        context.closePath();
+        context.fillStyle = bx > 5 ? '#a39b8c' : '#c4bcad'; context.fill();
+        context.strokeStyle = 'rgba(58,41,19,0.55)'; context.lineWidth = 1; context.stroke();
       });
+      context.restore();
+      wall(); context.strokeStyle = INK; context.lineWidth = 1.8; context.stroke();
       // Weep holes
-      context.fillStyle = '#4a453d';
-      [-22, -8, 8, 22].forEach(hx => { context.beginPath(); context.ellipse(hx, 7, 1.8, 1.4, 0, 0, Math.PI * 2); context.fill(); });
-      // Capping beam
-      context.fillStyle = '#e3ded2'; context.strokeStyle = '#6f695e'; context.lineWidth = 1.4;
-      context.beginPath(); context.rect(-28, -17, 56, 6); context.fill(); context.stroke();
-      context.fillStyle = 'rgba(255,255,255,0.5)'; context.fillRect(-27, -16.2, 54, 1.4);
-      // Hazard chevrons on the cap
-      context.fillStyle = '#e0a531';
-      for (let cx2 = -25; cx2 < 25; cx2 += 9) context.fillRect(cx2, -15.5, 4.5, 3.2);
-      // Spalling and a growing breach crack as it wears
+      [-22, -8, 8, 22].forEach(hx => {
+        context.beginPath(); context.ellipse(hx, 6.5, 2, 1.5, 0, 0, Math.PI * 2);
+        context.fillStyle = '#3f3a33'; context.fill();
+        context.strokeStyle = INK; context.lineWidth = 0.9; context.stroke();
+      });
+      // Capping beam, black-and-yellow hazard stripes
+      context.save();
+      context.beginPath(); context.rect(-28, -18, 56, 7); context.clip();
+      context.fillStyle = '#f2c230'; context.fillRect(-28, -18, 56, 7);
+      context.fillStyle = '#2c2418';
+      for (let sx = -40; sx < 34; sx += 8) {
+        context.beginPath(); context.moveTo(sx, -11); context.lineTo(sx + 4, -11); context.lineTo(sx + 9, -18); context.lineTo(sx + 5, -18); context.closePath(); context.fill();
+      }
+      context.fillStyle = 'rgba(255,255,255,0.35)'; context.fillRect(-28, -18, 56, 1.8);
+      context.restore();
+      context.beginPath(); context.rect(-28, -18, 56, 7);
+      context.strokeStyle = INK; context.lineWidth = 1.6; context.stroke();
+      // Spalling and a growing breach as it wears
       if (w < 0.8) {
-        context.strokeStyle = 'rgba(50,44,34,0.75)'; context.lineWidth = 1 + (1 - w) * 1.8;
+        context.strokeStyle = INK; context.lineWidth = 1 + (1 - w) * 1.8;
         context.beginPath();
-        context.moveTo(6, -12);
-        context.lineTo(3 - (1 - w) * 4, 0);
-        context.lineTo(9 + (1 - w) * 5, 14);
+        context.moveTo(6, -11); context.lineTo(3 - (1 - w) * 4, 0); context.lineTo(9 + (1 - w) * 5, 13);
         context.stroke();
         if (w < 0.45) {
           context.fillStyle = '#4a453d';
           context.beginPath();
-          context.moveTo(2, -12); context.lineTo(13, -12); context.lineTo(10, 2); context.lineTo(4, 1);
-          context.closePath(); context.fill();
+          context.moveTo(2, -11); context.lineTo(13, -11); context.lineTo(10, 2); context.lineTo(4, 1);
+          context.closePath(); context.fill(); context.stroke();
         }
       }
       break;
     }
   }
+  context.restore();
 }
+
 
 // Draws a premium rounded-pill HP bar with gradient fill + shine highlight.
 // cx/cy is the CENTER-TOP anchor. w=full bar width, h=bar height, hp=0..100.
@@ -12430,6 +13599,81 @@ function drawHPBar(context, cx, topY, w, h, hp, accent) {
    the scene. Tapping one earns a peso bonus. Each tier has its own
    material: ₱50 = plain burlap, ₱100 = worn leather-brown, ₱200 = rich
    gold-trimmed sack. The bag sways gently and bobs as it falls. ---- */
+
+/* ---- Coins flying into the budget ----
+   When a bag is collected, gold coins burst out of it and arc up into
+   the Budget panel, so the eye follows the money to where it is counted.
+   Purely visual; the budget itself is credited at the tap. */
+function budgetTargetInCanvas() {
+  const panel = document.getElementById('budgetPanel');
+  const wrapEl = document.getElementById('gameWrap');
+  if (!panel || !wrapEl) return { x: 70, y: 60 };
+  const r = panel.getBoundingClientRect(), wr = wrapEl.getBoundingClientRect();
+  return { x: (r.left + r.width * 0.3 - wr.left) / wr.width * W,
+           y: (r.top + r.height * 0.55 - wr.top) / wr.height * H };
+}
+function spawnCoinBurst(x, y, value) {
+  if (!state.coinFx) state.coinFx = [];
+  const tgt = budgetTargetInCanvas();
+  const n = value >= 200_000 ? 9 : value >= 100_000 ? 7 : 5;
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+    state.coinFx.push({
+      x0: x, y0: y,
+      burstX: x + Math.cos(a) * (18 + Math.random() * 16),
+      burstY: y + Math.sin(a) * (18 + Math.random() * 16),
+      tx: tgt.x + (Math.random() - 0.5) * 14, ty: tgt.y + (Math.random() - 0.5) * 8,
+      t: -i * 0.045,                       // staggered, so they stream rather than clump
+      dur: 0.62 + Math.random() * 0.12,
+      spin: Math.random() * 6, spinRate: 14 + Math.random() * 8
+    });
+  }
+}
+function drawCoinFx(context, dt) {
+  const list = state.coinFx;
+  if (!list || !list.length) return;
+  const INK = '#3a2913';
+  for (let i = list.length - 1; i >= 0; i--) {
+    const c = list[i];
+    c.t += dt;
+    if (c.t < 0) continue;
+    const k = Math.min(1, c.t / c.dur);
+    if (k >= 1) { list.splice(i, 1); continue; }
+    // Two-stage path: pop out of the bag, then swoop to the panel.
+    let x, y;
+    if (k < 0.28) {
+      const u = k / 0.28, e = 1 - (1 - u) * (1 - u);
+      x = c.x0 + (c.burstX - c.x0) * e; y = c.y0 + (c.burstY - c.y0) * e;
+    } else {
+      const u = (k - 0.28) / 0.72, e = u * u * (3 - 2 * u);
+      const cx = (c.burstX + c.tx) / 2, cy = Math.min(c.burstY, c.ty) - 40;   // arc over
+      const mx = (1 - e) * (1 - e) * c.burstX + 2 * (1 - e) * e * cx + e * e * c.tx;
+      const my = (1 - e) * (1 - e) * c.burstY + 2 * (1 - e) * e * cy + e * e * c.ty;
+      x = mx; y = my;
+    }
+    const r = 6.6 * (1 - k * 0.3);
+    const face = Math.cos(c.spin + c.t * c.spinRate);          // spinning coin
+    // sparkle trail behind each coin
+    if (c.px !== undefined) {
+      context.strokeStyle = 'rgba(255,224,130,0.55)'; context.lineWidth = r * 0.7; context.lineCap = 'round';
+      context.beginPath(); context.moveTo(c.px, c.py); context.lineTo(x, y); context.stroke();
+    }
+    c.px = x; c.py = y;
+    context.save();
+    context.translate(x, y);
+    context.globalAlpha = k > 0.9 ? (1 - k) / 0.1 : 1;
+    context.scale(Math.max(0.18, Math.abs(face)), 1);
+    context.beginPath(); context.arc(0, 0, r, 0, Math.PI * 2);
+    context.fillStyle = face > 0 ? '#ffc94d' : '#e9a52c'; context.fill();
+    context.lineWidth = 1.2; context.strokeStyle = INK; context.stroke();
+    context.beginPath(); context.arc(0, 0, r * 0.58, 0, Math.PI * 2);
+    context.lineWidth = 0.8; context.strokeStyle = 'rgba(160,100,20,0.8)'; context.stroke();
+    context.fillStyle = 'rgba(255,255,255,0.8)';
+    context.beginPath(); context.ellipse(-r * 0.35, -r * 0.35, r * 0.25, r * 0.14, -0.6, 0, Math.PI * 2); context.fill();
+    context.restore();
+  }
+}
+
 function drawFallingSuns(context) {
   if (!state.fallingSuns || state.fallingSuns.length === 0) return;
   context.save();
@@ -12442,17 +13686,17 @@ function drawFallingSuns(context) {
     if (alpha <= 0.01) return;
 
     const pulse = 1 + Math.sin(ambientTime * 3.2 + s.pulsePhase) * 0.05;
-    const r = (s.value === 200 ? 17 : s.value === 100 ? 14 : 12) * pulse;
+    const r = (s.value >= 200_000 ? 17 : s.value >= 100_000 ? 14 : 12) * pulse;
     const sway = Math.sin(ambientTime * 2.4 + s.pulsePhase) * 3;
 
     // Tier palettes
     let glowColor, bagLight, bagMid, bagDark, tieColor, textColor;
-    if (s.value === 200) {
+    if (s.value >= 200_000) {
       glowColor = 'rgba(250,204,21,0.55)';
       [bagLight, bagMid, bagDark] = ['#f3d98b', '#c99a3f', '#8a6420'];
       tieColor = '#7a4f14';
       textColor = '#4a2e0a';
-    } else if (s.value === 100) {
+    } else if (s.value >= 100_000) {
       glowColor = 'rgba(180,130,60,0.45)';
       [bagLight, bagMid, bagDark] = ['#c9a06a', '#a4753f', '#6e4c25'];
       tieColor = '#4a3218';
@@ -12566,7 +13810,7 @@ function drawFallingSuns(context) {
       context.fill();
 
       // Metallic gold trim ring for the rare ₱200 tier
-      if (s.value === 200) {
+      if (s.value >= 200_000) {
         context.strokeStyle = '#fff3c4';
         context.lineWidth = 2;
         context.beginPath();
@@ -12604,7 +13848,7 @@ function drawFallingSuns(context) {
 
     // Twinkling sparkle accents for the rare gold tier — three small
     // stars that twinkle out of phase instead of one static dot
-    if (s.value === 200) {
+    if (s.value >= 200_000) {
       const sparkles = [
         { dx: 0.32, dy: -0.14, ph: 0 },
         { dx: -0.34, dy: 0.22, ph: 2.1 },
@@ -12815,6 +14059,7 @@ function render() {
   drawVillagers(ctx);
   // Collapse dust sits in front of the buildings it came from.
   drawTownHazard(ctx);
+  drawPlacementGuide(ctx);
   drawCollapseDust(ctx);
   drawSlopeCoverHUD(ctx);
   /* Tricycles are drawn AFTER every building and landmark.
@@ -12871,109 +14116,136 @@ function render() {
   const S = HUD_SCALE * WAVE_GAUGE_BOOST;
   ctx.translate((W - (W - 30) * S) / 2 - 15 * S, 4 - 6 * S);
   ctx.scale(S, S);
-  const PX = 15, PY = 8, PW = W - 30, PH = 34;
-  ctx.shadowColor = 'rgba(0,0,0,0.38)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5;
-  // Arcade panel: warm parchment face, thick cream outline, hard bottom rim
-  // — the same recipe the DOM panels use, so the canvas gauge belongs to the
-  // same set instead of being the one cool-grey element on a warm HUD.
-  ctx.fillStyle = 'rgba(163,122,66,0.75)';
-  roundRectCtx(ctx, PX, PY + 5, PW, PH, 14); ctx.fill();       // rim below
-  const panelGrad = ctx.createLinearGradient(PX, PY, PX, PY + PH);
-  panelGrad.addColorStop(0, '#fdf3dc'); panelGrad.addColorStop(0.55, '#f2e0bb'); panelGrad.addColorStop(1, '#e6cf9f');
+  const PX = 15, PY = 7, PW = W - 30, PH = 36;
+  // Outlined game-kit panel — same recipe as the DOM HUD (see "HUD v3" in
+  // style.css): parchment face, ink outline, hard ink drop edge.
+  const INK = '#3a2913';
+  ctx.shadowColor = 'rgba(10,8,4,0.32)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 7;
+  ctx.fillStyle = INK;
+  roundRectCtx(ctx, PX, PY + 4, PW, PH, 14); ctx.fill();          // drop edge
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  const panelGrad = ctx.createLinearGradient(0, PY, 0, PY + PH);
+  panelGrad.addColorStop(0, '#fdf4de'); panelGrad.addColorStop(0.58, '#fdf4de'); panelGrad.addColorStop(1, '#f0ddb3');
   ctx.fillStyle = panelGrad;
   roundRectCtx(ctx, PX, PY, PW, PH, 14); ctx.fill();
-  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = '#fffdf6'; ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.6;
+  roundRectCtx(ctx, PX + 2.6, PY + 2.6, PW - 5.2, PH - 5.2, 11.5); ctx.stroke();
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
   roundRectCtx(ctx, PX, PY, PW, PH, 14); ctx.stroke();
-  ctx.save();
-  roundRectCtx(ctx, PX, PY, PW, PH, 14); ctx.clip();
-  const gloss = ctx.createLinearGradient(0, PY, 0, PY + PH * 0.5);
-  gloss.addColorStop(0, 'rgba(255,255,255,0.6)');
-  gloss.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gloss;
-  roundRectCtx(ctx, PX + 6, PY + 3, PW - 12, PH * 0.42, 10); ctx.fill();
-  ctx.restore();
 
   const withinWaveFrac = state.raining ? Math.min(1, state.stormTime / STORM_DUR) : 0;
   const waveIdx = Math.min(state.waveIndex, WAVE_ORDER.length - 1);
-  const waveName = WAVE_LABELS[WAVE_ORDER[waveIdx]].toUpperCase();
 
-  // Left slot: a countdown, which is the one thing the HUD never told the
-  // player. During the prep pause it counts into the next storm; while a
-  // storm runs it counts down what is left of it.
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#4a3418';
-  // Shown in REAL seconds, not game seconds. stormTime advances at
-  // GAME_SPEED, so printing it raw made the clock tick 1.5x per second —
-  // visibly wrong against a wall clock. Dividing by GAME_SPEED makes it
-  // count down once per real second, and naturally starts at a smaller
-  // number (50 rather than 75) which matches how long the storm lasts.
+  // ---- Left: status chip (ink pill) ----
+  // During the prep pause it counts into the next storm; while a storm runs
+  // it counts down what is left of it; otherwise it says which storm is next.
+  // Shown in REAL seconds, not game seconds: stormTime advances at
+  // GAME_SPEED, so it is divided back out to tick once per wall-clock second.
   const secsLeft = Math.max(0, Math.ceil((STORM_DUR - state.stormTime) / GAME_SPEED));
-  if (state.prepCountdown > 0) {
-    ctx.font = "800 13px Nunito, 'Baloo 2', sans-serif";
-    ctx.fillText(`NEXT IN ${Math.ceil(state.prepCountdown)}s`, PX + 14, PY + PH / 2 + 5);
-  } else if (state.raining) {
-    ctx.font = "900 19px Nunito, 'Baloo 2', sans-serif";
-    ctx.fillText(`${secsLeft}s`, PX + 14, PY + PH / 2 + 1);
-    ctx.font = "800 10px Nunito, 'Baloo 2', sans-serif";
-    ctx.fillStyle = 'rgba(74,52,24,0.65)';
-    ctx.fillText('LEFT', PX + 14, PY + PH / 2 + 13);
+  const chipX = PX + 6, chipY = PY + 5, chipW = 122, chipH = PH - 10;
+  const urgent = state.raining && secsLeft <= 10;
+  ctx.fillStyle = urgent ? '#a82718' : INK;
+  roundRectCtx(ctx, chipX, chipY, chipW, chipH, chipH / 2); ctx.fill();
+  const midY = chipY + chipH / 2;
+  ctx.fillStyle = '#fdf4de';
+  ctx.textBaseline = 'middle';
+  if (state.raining) {
+    // Clock face
+    const cx = chipX + 15;
+    ctx.strokeStyle = '#fdf4de'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(cx, midY, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, midY); ctx.lineTo(cx, midY - 4.2);
+    ctx.moveTo(cx, midY); ctx.lineTo(cx + 3.2, midY + 1.6); ctx.stroke();
+    ctx.textAlign = 'left';
+    // The number is in the display face, but the unit is set in Nunito:
+    // Luckiest Guy has no lowercase, so its capital S read as a 5 ("405").
+    ctx.font = "400 19px 'Luckiest Guy', 'Baloo 2', sans-serif";
+    ctx.fillText(`${secsLeft}`, cx + 13, midY + 2);
+    let tx = cx + 14 + ctx.measureText(`${secsLeft}`).width;
+    ctx.font = "900 16px Nunito, 'Baloo 2', sans-serif";
+    ctx.fillText('s', tx, midY + 0.5);
+    tx += ctx.measureText('s').width + 5;
+    ctx.font = "800 11px Nunito, 'Baloo 2', sans-serif";
+    ctx.fillStyle = 'rgba(253,244,222,0.75)';
+    ctx.fillText('left', tx, midY + 1);
+  } else if (state.prepCountdown > 0) {
+    ctx.textAlign = 'center';
+    ctx.font = "800 12.5px Nunito, 'Baloo 2', sans-serif";
+    ctx.fillText(`Next storm in ${Math.ceil(state.prepCountdown)}s`, chipX + chipW / 2, midY + 0.5);
   } else {
-    ctx.font = "800 11.5px Nunito, 'Baloo 2', sans-serif";
-    ctx.fillText(`STORM ${waveIdx + 1} OF ${WAVE_ORDER.length}`, PX + 12, PY + PH / 2 + 5);
+    ctx.textAlign = 'center';
+    ctx.font = "800 13px Nunito, 'Baloo 2', sans-serif";
+    ctx.fillText(`Storm ${waveIdx + 1} of ${WAVE_ORDER.length}`, chipX + chipW / 2, midY + 0.5);
   }
 
-  // One segment per wave: which storms are done, which is running and how
-  // far it has left are all separately legible at kiosk distance.
-  // segLeft clears the longest title ("MEDIUM STORM · 2/3") with room to spare.
-  const segLeft = PX + 150, segRight = PX + PW - 14, segGap = 7;
-  const segH = 18, segY = PY + (PH - segH) / 2;
+  // ---- Right: one segment per storm ----
+  // Which storms are done, which is running and how far it has to go are
+  // all separately legible at kiosk distance.
+  const segLeft = chipX + chipW + 10, segRight = PX + PW - 8, segGap = 8;
+  const segH = 22, segY = PY + (PH - segH) / 2;
   const segW = (segRight - segLeft - segGap * (WAVE_ORDER.length - 1)) / WAVE_ORDER.length;
-  const segColors = ['#22c55e', '#f59e0b', '#ef4444'];
-  const segLabels = ['EASY', 'MED', 'HARD'];
+  const segColors = [['#6ad986', '#33a852', '#1c7a39'], ['#ffd978', '#ffb838', '#ee861b'], ['#ff8a74', '#de4430', '#a82718']];
+  const segLabels = ['EASY', 'MEDIUM', 'HARD'];   // display face is caps-only
   ctx.textAlign = 'center';
   for (let f = 0; f < WAVE_ORDER.length; f++) {
     const sx = segLeft + f * (segW + segGap);
-    roundRectCtx(ctx, sx, segY, segW, segH, 9);
-    ctx.fillStyle = '#efe3c4'; ctx.fill();
-    ctx.strokeStyle = '#fffdf6'; ctx.lineWidth = 2.4;
-    roundRectCtx(ctx, sx, segY, segW, segH, 9); ctx.stroke();
+    const isCurrent = f === waveIdx;
+    const frac = f < waveIdx ? 1 : (isCurrent ? withinWaveFrac : 0);
 
-    const frac = f < waveIdx ? 1 : (f === waveIdx ? withinWaveFrac : 0);
+    // Current storm gets an amber halo so "you are here" reads at a glance
+    if (isCurrent) {
+      ctx.strokeStyle = state.raining ? `rgba(238,134,27,${0.55 + 0.35 * Math.sin(ambientTime * 5)})` : '#ee861b';
+      ctx.lineWidth = 3;
+      roundRectCtx(ctx, sx - 3, segY - 3, segW + 6, segH + 6, segH / 2 + 3); ctx.stroke();
+    }
+    // Recessed well
+    roundRectCtx(ctx, sx, segY, segW, segH, segH / 2);
+    ctx.fillStyle = '#e4cf9f'; ctx.fill();
+    ctx.save();
+    roundRectCtx(ctx, sx, segY, segW, segH, segH / 2); ctx.clip();
+    ctx.fillStyle = 'rgba(58,41,19,0.2)';
+    ctx.fillRect(sx, segY, segW, 3);
     if (frac > 0.005) {
-      ctx.save();
-      roundRectCtx(ctx, sx, segY, segW, segH, 9); ctx.clip();
       const g = ctx.createLinearGradient(0, segY, 0, segY + segH);
-      g.addColorStop(0, lerpColor(segColors[f], '#ffffff', 0.35));
-      g.addColorStop(1, segColors[f]);
+      g.addColorStop(0, segColors[f][0]); g.addColorStop(0.55, segColors[f][1]); g.addColorStop(1, segColors[f][2]);
       ctx.fillStyle = g;
       ctx.fillRect(sx, segY, segW * frac, segH);
-      ctx.restore();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(sx, segY, segW * frac, 3);
+      if (frac < 0.995) {   // ink leading edge, matching the DOM bars
+        ctx.fillStyle = INK;
+        ctx.fillRect(sx + segW * frac, segY, 2, segH);
+      }
     }
-    // Bright leading edge on the storm currently running
-    if (f === waveIdx && state.raining && frac > 0.01 && frac < 0.995) {
-      const hx = sx + segW * frac;
-      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(hx, segY + 2); ctx.lineTo(hx, segY + segH - 2); ctx.stroke();
-    }
-    // Label sits inside its segment; flipped to white once the fill is
-    // under it so it stays readable either way.
-    const cxLab = sx + segW / 2;
-    const covered = frac > 0.55;
-    ctx.font = "800 12px Nunito, 'Baloo 2', sans-serif";
-    if (covered) {
-      ctx.fillStyle = 'rgba(20,30,20,0.45)';
-      ctx.fillText(segLabels[f], cxLab + 1, segY + segH / 2 + 5);
+    ctx.restore();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    roundRectCtx(ctx, sx, segY, segW, segH, segH / 2); ctx.stroke();
+
+    // Label: white with an ink rim once the fill is under it, ink otherwise
+    const cxLab = f < waveIdx ? sx + segW / 2 - 7 : sx + segW / 2;
+    ctx.font = "400 13px 'Luckiest Guy', 'Baloo 2', sans-serif";
+    ctx.lineJoin = 'round';
+    if (frac > 0.5) {
+      ctx.strokeStyle = INK; ctx.lineWidth = 3;
+      ctx.strokeText(segLabels[f], cxLab, segY + segH / 2 + 1.5);
       ctx.fillStyle = '#ffffff';
     } else {
-      ctx.fillStyle = f <= waveIdx ? '#4a3418' : 'rgba(74,52,24,0.45)';
+      ctx.fillStyle = f <= waveIdx ? INK : 'rgba(58,41,19,0.45)';
     }
-    ctx.fillText(segLabels[f], cxLab, segY + segH / 2 + 4);
+    ctx.fillText(segLabels[f], cxLab, segY + segH / 2 + 1.5);
+
+    // Done: a small ink check badge at the end of the segment
     if (f < waveIdx) {
-      ctx.fillStyle = '#14532d'; ctx.font = "900 13px Nunito, sans-serif";
-      ctx.fillText('✓', sx + segW - 12, segY + segH / 2 + 5);
+      const bx = sx + segW - 11, by = segY + segH / 2;
+      ctx.fillStyle = '#fdf4de';
+      ctx.beginPath(); ctx.arc(bx, by, 7.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.stroke();
+      ctx.strokeStyle = '#1c7a39'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(bx - 3.4, by + 0.2); ctx.lineTo(bx - 0.8, by + 2.8); ctx.lineTo(bx + 3.6, by - 2.6); ctx.stroke();
     }
   }
+  ctx.textBaseline = 'alphabetic';
   ctx.restore();
   // Gauge done — everything after this belongs on the scene canvas again.
   ctx = sceneCtx;
@@ -13007,6 +14279,7 @@ function render() {
   // buildings, lahar, rain) but behind the drag-preview guide so they're
   // never obscured.
   drawFallingSuns(ctx);
+  drawCoinFx(ctx, 1 / 60);
 
   // Always drawn last so the placement guide stays visible above every
   // other layer (weather, buildings, lahar) while a tool is being dragged.
@@ -13083,6 +14356,9 @@ function loop(now) {
   // only the wall-clock length of a round changes.
   simulate(dt * GAME_SPEED);
   render();
+  // Landmark badges' health strips: a few times a second is plenty, and
+  // setBadgeHP only writes to the DOM when a value actually changed.
+  if ((badgeTick = (badgeTick + 1) % 8) === 0) tickLandmarkBadges();
   requestAnimationFrame(loop);
 }
 
@@ -13108,7 +14384,7 @@ wrap.addEventListener('pointerdown', (e) => {
       if (s.popT > 0) continue; // already collected
       // Art is small, but a kiosk tap target shouldn't be: pad the hit
       // radius well past the sprite so bags stay easy to catch by finger.
-      const hitR = (s.value === 200 ? 19 : s.value === 100 ? 16 : 14) + 16;
+      const hitR = (s.value >= 200_000 ? 19 : s.value >= 100_000 ? 16 : 14) + 16;
       if (Math.hypot(cx - s.x, cy - s.y) <= hitR) {
         // Award budget
         const earned = s.value;
@@ -13121,7 +14397,9 @@ wrap.addEventListener('pointerdown', (e) => {
         s.popT   = 1.0;  // drawFallingSuns uses popT > 0 as an override alpha
         s.maxAge = s.age + 0.28; // expire very shortly after
 
-        showToast(uiIcon('money') + ` +${formatPeso(earned)} — Money bag collected!`, 1100);
+        playMoneySound(s.value);
+        spawnCoinBurst(s.x, s.y, s.value);
+        showToast(uiIcon('money') + ` <b>+${formatPeso(earned)}</b> collected`, 1100, 'money');
         return; // one bag per tap; don't also place a tool
       }
     }
@@ -13137,6 +14415,7 @@ wrap.addEventListener('pointerdown', (e) => {
 });
 
 function resetState() {
+  clearToasts();   // no notices from the last run carry into the next
   laharRainTrack.pause();
   laharRainTrack.currentTime = 0;
 
@@ -13169,14 +14448,14 @@ function resetState() {
     damPools: new Array(channelPaths.length).fill(0), damCapped: new Array(channelPaths.length).fill(false), damRelease: new Array(channelPaths.length).fill(0),
     severFade: new Array(channelPaths.length).fill(1), severT: new Array(channelPaths.length).fill(1),
     brSeverFade: new Array(branchPaths.length).fill(1), brSeverT: new Array(branchPaths.length).fill(1),
-    placedItems: [], toolsPlacedTotal: 0, dust: [],
+    placedItems: [], toolsPlacedTotal: 0, dust: [], toolboxAutoOpened: false,
   boulders: [], burialLevel: 0, bankScars: [], hazardTimer: 0, bridgeWarn: null, particles: [], flowParticles: [], ripples: [],
     debris: [], splashes: [],
     comboCount: 0, lastPlacementTime: -999, maxCombo: 0,
     birdsFleeing: false, birdsFleeStartAmbient: 0,
     carsFleeing: false, carsFleeStartAmbient: 0,
     villagersFleeing: false, villagersFleeStartAmbient: 0,
-    fallingSuns: [], sunSpawnTimer: 6,
+    fallingSuns: [], coinFx: [], sunSpawnTimer: 6,
     waveIndex: 0, prepCountdown: -1,
   };
 
@@ -13215,14 +14494,14 @@ function startWave(waveIndex) {
     skyTransition: 0, screenShake: 0, lightningFlash: 0,
     impactTexts: [],
     lightningPath: [], laharProgresses: new Array(channelPaths.length).fill(0), branchProgresses: new Array(branchPaths.length).fill(0),
-    placedItems: [], toolsPlacedTotal: 0, dust: [],
+    placedItems: [], toolsPlacedTotal: 0, dust: [], toolboxAutoOpened: false,
   boulders: [], burialLevel: 0, bankScars: [], hazardTimer: 0, bridgeWarn: null, particles: [], flowParticles: [], ripples: [],
     debris: [], splashes: [],
     comboCount: 0, lastPlacementTime: -999,
     birdsFleeing: true, birdsFleeStartAmbient: ambientTime,
     carsFleeing: true, carsFleeStartAmbient: ambientTime,
     villagersFleeing: true, villagersFleeStartAmbient: ambientTime,
-    fallingSuns: [], sunSpawnTimer: 6,
+    fallingSuns: [], coinFx: [], sunSpawnTimer: 6,
     prepCountdown: -1,
   };
 
@@ -13231,7 +14510,7 @@ function startWave(waveIndex) {
 
   buildToolbox();
   document.getElementById('rainPanel').classList.add('active');
-  document.getElementById('rainStatus').textContent = 'Storm Active';
+  document.getElementById('rainStatus').textContent = 'Storm active';
   playSound('storm');
   laharRainTrack.play().catch(err => console.log("Audio blocked: ", err));
   showToast(`${WAVE_LABELS[gameSettings.difficulty]} wave begins!`);
@@ -13277,8 +14556,13 @@ document.querySelectorAll('.town-card .select-town-btn').forEach(btn => {
     e.stopPropagation();
     const card = btn.closest('.town-card');
     if (!card) return;
-    document.querySelectorAll('.town-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.town-card').forEach(c => {
+      c.classList.remove('selected');
+      const sb = c.querySelector('.select-town-btn');
+      if (sb) sb.textContent = 'Select';
+    });
     card.classList.add('selected');
+    btn.textContent = 'Selected';
     gameSettings.town = card.dataset.town;
   });
 });
@@ -13333,6 +14617,24 @@ document.getElementById('restartBtn').addEventListener('click', () => {
 // this restarts the full 3-wave campaign (Easy → Medium → Hard) from the
 // beginning, on the same town, skipping the objective/town/info screens
 // entirely for a fast retry.
+/* Save Another Town: keep the player's name and their leaderboard history,
+   drop everything belonging to the finished run, and hand them back to the
+   town list. Going through showTownSelection rather than a reload means
+   they do not have to type their name again. */
+const nextTownEl = document.getElementById('nextTownBtn');
+if (nextTownEl) nextTownEl.addEventListener('click', () => {
+  playSound('confirm');
+  stopConfetti();
+  if (laharRainTrack) { try { laharRainTrack.pause(); laharRainTrack.currentTime = 0; } catch (e) {} }
+  const ov = document.getElementById('overlay');
+  if (ov) ov.classList.add('show');
+  ['endCard', 'leaderboardCard'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  showTownSelection();
+});
+
 document.getElementById('tryAgainBtn').addEventListener('click', () => {
   stopConfetti();
   startGame();
@@ -13368,6 +14670,89 @@ document.getElementById('closeMenuBtn').addEventListener('click', () => {
 // and resumes the current round. Falls back to navigating straight to
 // the kiosk's menu page when there's no parent iframe to hand off to
 // (e.g. testing index.html standalone in its own browser tab).
+/* ============================================================
+   KIOSK IDLE RESET
+   ------------------------------------------------------------
+   The game had no idle handling at all, which is the one thing an
+   unattended exhibit cannot do without: a visitor who wanders off
+   mid-wave leaves the machine sitting on a half-played game, and
+   whoever walks up next inherits a stranger's budget, their losses
+   and their name on the scoreboard.
+
+   Two different timeouts, because the two situations differ:
+     - Sitting on a menu with nothing happening is genuinely
+       abandoned. Reset sooner.
+     - Mid-storm, a visitor may simply be WATCHING. The storm is
+       only 50s a wave, and resetting someone who is engrossed is
+       worse than waiting. Reset later.
+
+   A warning card counts down first so nobody is cut off without
+   the chance to carry on — one touch anywhere cancels it.
+   ============================================================ */
+const IDLE_MENU_MS  = 90000;    // idle on a menu
+const IDLE_PLAY_MS  = 180000;   // idle during a run
+const IDLE_WARN_MS  = 15000;    // countdown before the reset lands
+let idleLast = Date.now();
+let idleWarnEl = null;
+let idleTimer = null;
+
+function idleActive() {
+  // "Playing" means a storm is running or the player has tools down.
+  return !!(state && (state.running || (state.placedItems && state.placedItems.length)));
+}
+
+function ensureIdleWarning() {
+  if (idleWarnEl) return idleWarnEl;
+  idleWarnEl = document.createElement('div');
+  idleWarnEl.id = 'idleWarn';
+  idleWarnEl.style.cssText =
+    'position:absolute;inset:0;z-index:120;display:none;align-items:center;' +
+    'justify-content:center;background:rgba(10,14,20,0.72);backdrop-filter:blur(2px);';
+  idleWarnEl.innerHTML =
+    '<div style="background:linear-gradient(180deg,#fdf5e2,#e7d3a8);border:4px solid #fffdf6;' +
+    'border-radius:22px;padding:26px 30px;text-align:center;max-width:78%;' +
+    'box-shadow:0 10px 26px rgba(0,0,0,0.45)">' +
+    '<div style="font:900 24px Nunito,sans-serif;color:#3f2d12">Still there?</div>' +
+    '<div style="font:700 16px Nunito,sans-serif;color:#6b4a18;margin-top:8px">' +
+    'Starting over in <b id="idleCount">15</b>s</div>' +
+    '<div style="font:800 15px Nunito,sans-serif;color:#2f6b34;margin-top:14px">' +
+    'Touch anywhere to keep playing</div></div>';
+  (document.getElementById('gameWrap') || document.body).appendChild(idleWarnEl);
+  return idleWarnEl;
+}
+
+function resetIdle() {
+  idleLast = Date.now();
+  if (idleWarnEl && idleWarnEl.style.display === 'flex') idleWarnEl.style.display = 'none';
+}
+
+function idleTick() {
+  const limit = idleActive() ? IDLE_PLAY_MS : IDLE_MENU_MS;
+  const since = Date.now() - idleLast;
+  const el = ensureIdleWarning();
+  if (since > limit + IDLE_WARN_MS) {
+    // Time is up: hand control back to the kiosk shell for a clean start.
+    el.style.display = 'none';
+    try { window.parent.postMessage('exit-lahar-game', '*'); } catch (e) {}
+    setTimeout(() => { try { location.reload(); } catch (e) {} }, 400);
+    idleLast = Date.now();
+    return;
+  }
+  if (since > limit) {
+    el.style.display = 'flex';
+    const left = Math.ceil((limit + IDLE_WARN_MS - since) / 1000);
+    const c = document.getElementById('idleCount');
+    if (c) c.textContent = String(left);
+  } else if (el.style.display === 'flex') {
+    el.style.display = 'none';
+  }
+}
+
+['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(ev => {
+  window.addEventListener(ev, resetIdle, { passive: true, capture: true });
+});
+idleTimer = setInterval(idleTick, 1000);
+
 document.getElementById('exitToKioskBtn').addEventListener('click', () => {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage('exit-lahar-game', '*');

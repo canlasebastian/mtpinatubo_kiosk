@@ -14,20 +14,10 @@
   </div>
 </div>
 
-<!-- Background Music -->
-<audio 
-  #bgMusic 
-  autoplay 
-  loop 
-  muted 
->
-  <source src="/assets/audio/bgmusic.mp3" type="audio/mpeg">
-</audio>
-
 <!-- Menu Button (Left Side) -->
 <button
   (click)="toggleMenu()"
-  class="fixed bottom-18 left-15 z-50 cursor-pointer focus:outline-none bg-transparent border-4 border-white rounded-full p-4 pointer-events-auto hover:scale-110 transition-transform"
+  class="fixed bottom-18 left-12 z-50 cursor-pointer focus:outline-none bg-transparent border-4 border-white rounded-full p-3 pointer-events-auto hover:scale-110 transition-transform"
   aria-label="Toggle menu"
 >
   <i
@@ -39,7 +29,7 @@
 <!-- Menu Dropdown -->
 <div 
   *ngIf="isMenuOpen"
-  class="fixed bottom-40 left-15 z-50 bg-transparent border-4 border-white rounded-full p-4 pointer-events-auto flex flex-col gap-6"
+  class="fixed bottom-40 left-12   z-50 bg-transparent border-4 border-white rounded-full p-3 pointer-events-auto flex flex-col gap-6"
 >
   <!-- Toggle Music Button -->
   <button

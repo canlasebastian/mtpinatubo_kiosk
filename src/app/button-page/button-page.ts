@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, ViewChild, OnInit, OnDestroy, ChangeDetectorRef, AfterViewInit } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnInit, OnDestroy, ChangeDetectorRef, AfterViewInit, HostListener } from '@angular/core';
 import { Router } from "@angular/router";
+import { AudioService } from '../services/audio.service'; // adjust path to match your project
 
 interface TimelineSlide {
   id: number;
@@ -23,13 +24,14 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('sliderTrack') sliderTrack!: ElementRef;
   @ViewChild('kioskVideoPlayer') videoPlayer!: ElementRef<HTMLVideoElement>;
   @ViewChild('bgVideo') bgVideo!: ElementRef<HTMLVideoElement>;
-  @ViewChild('bgMusic') bgMusic!: ElementRef<HTMLAudioElement>;
 
   isMenuOpen = false;
-  isMusicPlaying = true;
   viewMode: 'carousel' | 'grid' = 'carousel';
   activeIndex: number = 1;
   private rotationInterval: any;
+
+  private idleTimer: any;
+  private readonly IDLE_DURATION_MS = 100000; // adjust to taste — 5s is very short for a kiosk
 
   slides: TimelineSlide[] = [
     {
@@ -37,8 +39,8 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
       images: ['assets/images/ptst1.jpg', 'assets/images/ptst2.JPG', 'assets/images/ptst9.jpg',],
       currentImageIndex: 0,
       title: '',
-      captionTitle: 'Pinatubo AVP\'s',
-      description: 'Explore powerful firsthand accounts and personal narratives of resilience from the historic 1991 eruption.',
+      captionTitle: 'Pinatubo Videos',
+      description: 'Relive the disaster and raw destruction through actual footage of the 1991 eruption.',
       route: '/avp'
     },
     {
@@ -47,7 +49,7 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
       currentImageIndex: 0,
       title: 'Mt. Pinatubo Stories',
       captionTitle: 'Pinatubo Stories',
-      description: 'Explore powerful firsthand accounts and personal narratives of resilience from the historic 1991 eruption.',
+      description: 'Watch personal journal entries and deeply moving stories of loss, hope, and survival.',
       route: '/videos'
     },
     {
@@ -56,33 +58,34 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
       currentImageIndex: 0,
       title: 'Reliving The Pinatubo Eruption',
       captionTitle: 'Reliving The Pinatubo Eruption',
-      description: 'Journey through history to trace the critical hours of the eruption and the decades of recovery that followed.',
+      description: 'Experience the eruption timeline firsthand through an interactive historical simulation.',
       route: '/simulator'
     },
     {
       id: 4,
-      images: ['/assets/images/logos/ai.png'  ],
+      images: ['/assets/images/chatbot/namalyariavatar.png' ],
       currentImageIndex: 0,
       title: 'Pinatubo Caldera',
       captionTitle: 'Ask Apo Namalyari (AI)',
-      description: 'Interact with our intelligent guide to explore the science, geology, and indigenous legends of the majestic caldera.',
+      description: 'Let Apo Namalyari guide you through the ancient lore, geology, and history of the volcano.',
       route: '/apo-pinatubo'
     },
     {
       id: 5,
-      images: ['assets/images/game_slide1.png'  ],
+     images: ['assets/images/laharaya/laharaya_logo2.png', 'assets/images/laharaya/img1.png', 'assets/images/laharaya/img2.png', 'assets/images/laharaya/img3.png'],
       currentImageIndex: 0,
       title: 'Pinatubo Game',
       captionTitle: 'Laharaya (Game)',
-      description: 'disaster-defense game where players protect communities from the destructive lahar flow of Mount Pinatubo. Strategically build defenses, protect homes, and save the town before the lahar reaches them.',
+      description: 'Build strategic defenses to protect towns and save communities from incoming lahar flows.',
       route: '/lahar-defense'
     }
   ];
 
-  constructor(private router: Router, private cdr: ChangeDetectorRef) {}
+  constructor(private router: Router, private cdr: ChangeDetectorRef, private audioService: AudioService) {}
 
   ngOnInit(): void {
     this.startActiveRotation();
+    this.resetIdleTimer();
   }
 
   ngAfterViewInit(): void {
@@ -93,6 +96,7 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     this.stopRotation();
+    this.clearIdleTimer();
   }
 
   goBack(): void {
@@ -103,11 +107,12 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
     this.isMenuOpen = !this.isMenuOpen;
   }
 
+  get isMusicPlaying(): boolean {
+    return this.audioService.isPlaying;
+  }
+
   toggleMusic(): void {
-    if (this.bgMusic && this.bgMusic.nativeElement) {
-      this.bgMusic.nativeElement.muted = !this.bgMusic.nativeElement.muted;
-      this.isMusicPlaying = !this.bgMusic.nativeElement.muted;
-    }
+    this.audioService.toggleMute();
   }
 
   toggleViewMode(): void {
@@ -153,6 +158,7 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onTrackScroll(event: Event): void {
+    this.resetIdleTimer();
     const track = event.target as HTMLElement;
     const cards = track.querySelectorAll('.polaroid-card');
     const trackCenter = track.getBoundingClientRect().left + (track.offsetWidth / 2);
@@ -206,4 +212,25 @@ export class ButtonPage implements OnInit, OnDestroy, AfterViewInit {
     }, 200);
   }
   
+    private resetIdleTimer(): void {
+    this.clearIdleTimer();
+    this.idleTimer = setTimeout(() => {
+      this.goBack(); // navigates to '' — your welcome page
+    }, this.IDLE_DURATION_MS);
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+    }
+  }
+
+  @HostListener('document:click')
+  @HostListener('document:touchstart')
+  @HostListener('document:mousemove')
+  @HostListener('document:keydown')
+  @HostListener('document:wheel')
+  onUserActivity(): void {
+    this.resetIdleTimer();
+  }
 }
