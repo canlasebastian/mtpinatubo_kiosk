@@ -1,0 +1,644 @@
+/* Core Layout Container with Dark Volcanic Tone Background */
+.video-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 1920px;
+  min-height: 1920px;
+  max-height: 1920px;
+  width: 1080px;
+  padding: 6rem 0 6.75rem 0;
+  box-sizing: border-box;
+  margin: 0 auto;
+  /* Locks the kiosk frame to a fixed size so switching filters/pages
+     never grows or shrinks the page and triggers a scrollbar. */
+  overflow: hidden;
+}
+
+/* Background Image */
+.video-container::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background:
+    linear-gradient(
+      rgba(15, 23, 36, 0.45), 
+      rgba(15, 23, 36, 0.45)
+    ),
+    url('/assets/images/ptstories-bg.png') no-repeat center center/cover;
+  filter: grayscale(80%) contrast(1.15);
+  z-index: -2;
+}
+
+/* Vignette & Depth Gradient Overlay */
+.video-container::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(10, 15, 24, 0.30) 0%,
+      rgba(15, 22, 32, 0.65) 50%,
+      rgba(8, 12, 18, 0.90) 100%
+    );
+  z-index: -1;
+}
+
+/* --- MUSEUM INTERACTIVE BACK BUTTON --- */
+.video-container .apo-back-btn {
+  position: absolute;
+  top: 3.5rem;
+  right: 4rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.9rem 1.8rem;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  color: #E2E4E9;
+  font-family: "Kinetika Regular", sans-serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.15s, color 0.15s, transform 0.15s, background 0.15s;
+}
+
+.video-container .apo-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.video-container .apo-back-btn:hover {
+  color: #FFF;
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.video-container .apo-back-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* --- HEADERS --- */
+.hero-title {
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2.5rem;
+  margin-bottom: 2.25rem;
+}
+
+/* Small crossed-out lead-in word above the main title, matching the
+   handwritten mockup where "THE" is struck through above "PINATUBO". */
+.title-small-prefix {
+  font-family: "Cinzel", serif;
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: 10px;
+  color: #DFBA73;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: rgba(223, 186, 115, 0.85);
+  opacity: 0.75;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  margin-bottom: 0.6rem;
+}
+
+/* Big display title: "PINATUBO" */
+.main-title {
+  font-family: "Cinzel", serif;
+  font-size: 6rem;
+  font-weight: 700;
+  color: #DFBA73;
+  letter-spacing: 3px;
+  line-height: 1;
+  margin: 0;
+  text-shadow: 0 6px 16px rgba(0, 0, 0, 0.95), 0 3px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* Boxed subtitle: "STORIES OF LOSS & SURVIVAL" */
+.boxed-subtitle-container {
+  margin-top: 1.8rem;
+  padding: 0.7rem 2.5rem;
+  border: 2px solid #DFBA73;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.boxed-subtitle {
+  font-family: "Cinzel", serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #F1E4C9;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+
+/* Bottom line: "JOURNAL" */
+.sub-title-journal {
+  font-family: "Cinzel", serif;
+  font-weight: 700;
+  font-size: 2.2rem;
+  letter-spacing: 10px;
+  color: #DFBA73;
+  margin: 0.4rem 0 0 0;
+  text-shadow: 0 6px 16px rgba(0, 0, 0, 0.9), 0 3px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* --- (Legacy title classes kept in case they're referenced elsewhere) --- */
+.header {
+  font-family: "Cinzel", serif;
+  font-size: 72px;
+  color: #FFFFFF;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  text-shadow: 0 6px 16px rgba(0, 0, 0, 0.95), 0 3px 6px rgba(0, 0, 0, 0.8);
+  text-align: center;
+  margin: 0;
+}
+
+.text-spacer {
+  margin-top: 10px;
+}
+
+.title-divider {
+  width: 75%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #DFBA73 50%, transparent);
+  margin: 2.5rem 0 1rem 0;
+  filter: drop-shadow(0px 3px 6px rgba(0, 0, 0, 0.6));
+}
+
+.sub-head {
+  margin-top: 15px;
+  margin-bottom: 4rem;
+  font-family: "Kinetika Regular", sans-serif;
+  font-weight: 700;
+  color: #DFBA73;
+  text-shadow: 0 3px 8px rgba(0, 0, 0, 0.9);
+  font-size: 1.2rem;
+  text-align: center;
+  letter-spacing: 3px;
+}
+
+/* --- FILTER CONTROLS & PAGINATION --- */
+.filter-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  z-index: 20;
+}
+
+.filter-tab {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  color: #A0A5B0;
+  font-family: "Kinetika Regular", sans-serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  padding: 1rem 2.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  pointer-events: auto !important;
+}
+
+.filter-tab:hover {
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.filter-tab.active {
+  color: #0d131a;
+  background: #DFBA73;
+  border-color: #DFBA73;
+  box-shadow: 0 6px 20px rgba(223, 186, 115, 0.35);
+}
+
+/* Dots Indicator Directly Below Filters */
+.filter-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  z-index: 20;
+}
+
+.indicator-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  pointer-events: auto !important;
+}
+
+.indicator-dot:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.indicator-dot.active {
+  background: #DFBA73;
+  transform: scale(1.4);
+  box-shadow: 0 0 12px rgba(223, 186, 115, 0.6);
+}
+
+/* --- GALLERY GRID & INTERACTIVE WRAPPER --- */
+.gallery-wrapper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  max-width: 1020px;
+  /* Fixed height reserved for the largest possible grid (2 columns x 3 rows
+     of profile cards). This means switching filter tabs or pages — even
+     to a page with fewer cards — never changes the height of the kiosk
+     page, so it behaves the same as the very first render (no scroll).
+     Sized to snugly fit 3 rows at the current avatar size + gap, with a
+     small buffer, so the whole page actually fits inside the 1080x1920
+     kiosk frame instead of being clipped by overflow: hidden. */
+  height: 1150px;
+  min-height: 1150px;
+  padding: 0 2rem;
+  box-sizing: border-box;
+  margin: 0.5rem 0 5rem 0;
+  overflow: hidden;
+}
+
+.grid-content {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 5rem;
+  width: 100%;
+  max-width: 780px;
+  height: 100%;
+  padding-top: 16px;
+  padding-bottom: 12px;
+  box-sizing: border-box;
+  perspective: 1000px;
+}
+
+/* Fly/swipe animation played on the gallery when changing pages or
+   filter tabs. Angular toggles these classes on/off via [class.x],
+   so the animation restarts cleanly on every page change. */
+.grid-content.slide-left {
+  animation: slideInFromRight 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+}
+
+.grid-content.slide-right {
+  animation: slideInFromLeft 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+}
+
+/* Navigation Arrows */
+.nav-arrow {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  color: #DFBA73;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  flex-shrink: 0;
+  /* Keep the arrows vertically centered in the gallery area regardless
+     of the profile grid being top-aligned. Nudged up slightly since the
+     grid's visual weight sits a bit above the box's true center. */
+  align-self: center;
+  transform: translateY(-15px);
+  pointer-events: auto !important;
+}
+
+.nav-arrow svg {
+  width: 36px;
+  height: 36px;
+}
+
+.nav-arrow:hover:not(:disabled) {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-15px) scale(1.1);
+}
+
+.nav-arrow:active:not(:disabled) {
+  transform: translateY(-15px) scale(0.93);
+}
+
+.nav-arrow:disabled {
+  opacity: 0.15;
+  cursor: not-allowed;
+  color: #A0A5B0;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
+
+/* Base Profile Card */
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  width: calc(50% - 2.5rem);
+  min-width: 320px;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Circular Avatar Framework */
+.avatar-ring {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  border: 3px solid rgba(223, 186, 115, 0.85);
+  overflow: hidden;
+  background-color: #11151c;
+  box-shadow:
+    0 0 10px rgba(223, 186, 115, 0.35),
+    0 0 18px rgba(223, 186, 115, 0.15),
+    0 12px 30px rgba(0, 0, 0, 0.65);
+  
+  /* Floating + gentle gold glow, timing staggered per-card below */
+  animation: floatUpDown 4s ease-in-out infinite, glowPulse 3.4s ease-in-out infinite;
+  transition: transform 0.15s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Staggered timing so cards never float or glow in sync with each other.
+   Each value pair = (floatUpDown delay, glowPulse delay). */
+.profile-card:nth-child(1) .avatar-ring { animation-delay: 0s, 0s; }
+.profile-card:nth-child(2) .avatar-ring { animation-delay: -1.3s, -0.7s; }
+.profile-card:nth-child(3) .avatar-ring { animation-delay: -2.6s, -1.9s; }
+.profile-card:nth-child(4) .avatar-ring { animation-delay: -0.9s, -2.4s; }
+.profile-card:nth-child(5) .avatar-ring { animation-delay: -3.1s, -0.4s; }
+.profile-card:nth-child(6) .avatar-ring { animation-delay: -1.8s, -1.2s; }
+
+.inner-glow-shield {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.85);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.avatar-ring img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Profile Names Text styling */
+.profile-meta {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-meta h3 {
+  color: #FFFFFF;
+  font-family: "Cinzel", serif;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  margin-top: 1.8rem;
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.9);
+  transition: color 0.2s ease;
+}
+
+.profile-affiliation {
+  display: block;
+  font-family: "Kinetika Regular", sans-serif;
+  font-size: 1.7rem;
+  color: rgba(223, 186, 115, 0.9);
+  margin-top: 6px;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  /* Guarantees a single line even for longer affiliations, so the grid's
+     row height never grows past what's reserved (which would otherwise
+     push the last row into the footer with no room to scroll). */
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* INTERACTIVE ACTIVE STATE HOVERS */
+.profile-card:hover .avatar-ring {
+  border-color: rgba(240, 210, 150, 0.95);
+  box-shadow:
+    0 0 16px rgba(240, 210, 150, 0.5),
+    0 0 28px rgba(223, 186, 115, 0.25),
+    0 15px 35px rgba(0, 0, 0, 0.85);
+}
+
+.profile-card:hover .profile-meta h3 {
+  color: #FFE0A3;
+}
+
+.profile-card:active .avatar-ring {
+  transform: scale(0.94) !important;
+  border-color: rgba(255, 244, 222, 0.95) !important;
+  box-shadow:
+    0 0 22px rgba(223, 186, 115, 0.6),
+    0 0 12px rgba(255, 255, 255, 0.4) !important;
+  filter: brightness(1.1);
+}
+
+/* --- THEATRICAL MODAL OVERLAY --- */
+.video-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1080px;
+  height: 1920px;
+  background-color: rgba(6, 10, 15, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeInModal 0.2s ease-out;
+  pointer-events: auto !important;
+}
+
+.modal-box {
+  position: relative;
+  width: 80%;
+  max-width: 750px;
+  background: #0d131a;
+  border: 3px solid #3d3736;
+  border-radius: 16px;
+  padding: 2.5rem;
+  box-shadow: 0 45px 100px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.modal-header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.now-playing-tag {
+  font-family: "Kinetika Regular", sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #DFBA73;
+  letter-spacing: 3px;
+}
+
+.close-modal-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  font-size: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.close-modal-btn:hover {
+  background: #3e3837;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.player-surface {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background-color: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.9);
+}
+
+.player-surface video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-unavailable {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2.5rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: "Kinetika Regular", sans-serif;
+  font-size: 1.3rem;
+}
+
+.alert-icon {
+  margin-bottom: 18px;
+  color: #DFBA73;
+  width: 48px;
+  height: 48px;
+}
+
+.modal-descriptor h2 {
+  font-family: "Cinzel", serif;
+  color: #fff;
+  margin: 2rem 0 0 0;
+  font-size: 2.2rem;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* --- KEYFRAMES --- */
+@keyframes floatUpDown {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Gentle gold glow on the avatar rings */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 8px rgba(223, 186, 115, 0.28),
+      0 0 16px rgba(223, 186, 115, 0.12),
+      0 12px 30px rgba(0, 0, 0, 0.65);
+  }
+  50% {
+    box-shadow:
+      0 0 14px rgba(223, 186, 115, 0.45),
+      0 0 24px rgba(223, 186, 115, 0.2),
+      0 12px 30px rgba(0, 0, 0, 0.65);
+  }
+}
+
+/* Gallery fly-in on page/filter change (next page → content enters from the right) */
+@keyframes slideInFromRight {
+  from { transform: translateX(70px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Gallery fly-in on page/filter change (previous page → content enters from the left) */
+@keyframes slideInFromLeft {
+  from { transform: translateX(-70px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeInModal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

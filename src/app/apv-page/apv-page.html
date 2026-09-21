@@ -1,0 +1,280 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+
+<div class="apv-container">
+
+  <!-- ============================= -->
+
+  <!-- NAVIGATION -->
+
+  <!-- ============================= -->
+
+  <div class="nav-bar fixed top-0 w-full z-20 pointer-events-none">
+    <div class="nav-container px-10 py-7 flex justify-between items-start">
+
+
+  <div class="nav-logo">
+    <a href="">
+      <img src="/assets/images/logos/mainlogo.png" alt="Main Logo">
+    </a>
+  </div>
+
+  <a
+    (click)="goBack()"
+    class="back-button pointer-events-auto cursor-pointer"
+    aria-label="Back to previous page"
+  >
+    <i class="fa-solid fa-circle-chevron-left"></i>
+  </a>
+
+</div>
+
+
+  </div>
+
+  <!-- ============================= -->
+
+  <!-- HERO / PAGE INTRO -->
+
+  <!-- ============================= -->
+
+  <header class="apv-hero">
+
+
+<div class="hero-eyebrow">
+  AUDIO VISUAL PRESENTATIONS
+</div>
+
+<h1 class="hero-title">
+  DISASTER &amp; DESTRUCTION
+</h1>
+
+<div class="hero-subtitle-box">
+  <span>SCENES FROM THE PINATUBO ERUPTION</span>
+</div>
+
+<div class="hero-divider"></div>
+
+<p class="hero-introduction">
+  Mga kuwentong isinalaysay sa pamamagitan ng larawan,
+  tunog, at alaala ng mga taong nakaranas sa pagbabago
+  ng Mt. Pinatubo.
+</p>
+
+
+  </header>
+
+  <!-- ============================= -->
+
+  <!-- AVP COLLECTION -->
+
+  <!-- ============================= -->
+
+  <main class="avp-content">
+
+
+<div class="section-heading">
+  <span class="section-number">01</span>
+
+  <div class="section-title-group">
+    <span class="section-label">THE COLLECTION</span>
+    <h2>Audio Visual Stories</h2>
+  </div>
+
+  <div class="section-rule"></div>
+</div>
+
+
+<!-- AVP GRID -->
+
+<div class="avp-grid">
+
+  <!-- AVP CARD 01 -->
+  <article
+    class="avp-card featured"
+    *ngFor="let video of videos; let i = index"
+    (click)="openVideoModal(video)"
+  >
+
+    <div class="avp-image">
+
+      <img
+        [src]="video.thumbnail"
+        [alt]="video.title"
+        (error)="onThumbnailError($event)"
+      >
+
+      <div class="image-overlay"></div>
+
+      <!-- Number -->
+      <div class="avp-number">
+        {{ (i + 1).toString().padStart(2, '0') }}
+      </div>
+
+      <!-- Duration -->
+      <div class="duration-tag" *ngIf="video.duration">
+        {{ video.duration }}
+      </div>
+
+      <!-- Play -->
+      <div class="play-button">
+        <div class="play-icon"></div>
+      </div>
+
+    </div>
+
+
+    <!-- CARD INFORMATION -->
+
+    <div class="avp-info">
+
+      <div class="avp-category">
+        AUDIO VISUAL PRESENTATION
+      </div>
+
+      <h3>
+        {{ video.title }}
+      </h3>
+
+      <p *ngIf="video.description">
+        {{ video.description }}
+      </p>
+
+      <div class="watch-indicator">
+        <span>WATCH STORY</span>
+        <i class="fa-solid fa-arrow-right"></i>
+      </div>
+
+    </div>
+
+  </article>
+
+</div>
+
+
+  </main>
+
+  <!-- ============================= -->
+
+  <!-- FOOTER STATEMENT -->
+
+  <!-- ============================= -->
+
+  <section class="archive-footer">
+
+<div class="footer-line"></div>
+
+<p>
+  MGA KUWENTO NG KAHAPON,
+  <span>ALAALA PARA SA KINABUKASAN.</span>
+</p>
+
+<div class="footer-line"></div>
+
+
+  </section>
+
+  <!-- ============================= -->
+
+  <!-- VIDEO MODAL -->
+
+  <!-- ============================= -->
+
+  <div
+    class="video-modal"
+    *ngIf="selectedVideo"
+    (click)="closeVideoModal()"
+  >
+
+
+<div
+  class="modal-box"
+  (click)="$event.stopPropagation()"
+>
+
+  <!-- Modal Header -->
+
+  <div class="modal-header">
+
+    <div class="modal-heading">
+
+      <span class="modal-label">
+        AUDIO VISUAL PRESENTATION
+      </span>
+
+      <h2>
+        {{ selectedVideo.title }}
+      </h2>
+
+    </div>
+
+    <button
+      class="close-modal-btn"
+      (click)="closeVideoModal()"
+      aria-label="Close video player"
+    >
+      <span></span>
+      <span></span>
+    </button>
+
+  </div>
+
+
+  <!-- Video -->
+
+  <div class="player-surface">
+
+    <video
+      #kioskVideoPlayer
+      *ngIf="!videoUnavailable"
+      controls
+      autoplay
+      controlsList="nodownload noremoteplayback"
+      disablePictureInPicture
+      [src]="selectedVideo.videoSrc"
+      (error)="onVideoError()"
+    >
+      Your browser does not support video playback.
+    </video>
+
+
+    <!-- Video unavailable -->
+
+    <div
+      class="video-unavailable"
+      *ngIf="videoUnavailable"
+    >
+
+      <div class="unavailable-icon">
+        !
+      </div>
+
+      <p>
+        This presentation isn't available
+        on this kiosk yet.
+      </p>
+
+    </div>
+
+  </div>
+
+
+  <!-- Modal Description -->
+
+  <div class="modal-description" *ngIf="selectedVideo.description">
+
+    <span>ABOUT THIS PRESENTATION</span>
+
+    <p>
+      {{ selectedVideo.description }}
+    </p>
+
+  </div>
+
+</div>
+
+
+  </div>
+
+</div>

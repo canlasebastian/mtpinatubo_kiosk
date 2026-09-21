@@ -1,0 +1,208 @@
+<div class="page-wrap flex flex-col h-screen">
+  <div class="game-host flex-1 min-h-0 w-full relative">
+    <div *ngIf="!gameStarted" class="welcome-overlay flex flex-col items-center justify-center h-full w-full text-center px-8 relative overflow-hidden">
+
+      <!-- Upper-Left Museum Home Button -->
+      <button (click)="goHome()" class="home-btn" aria-label="Back to exhibit menu">
+        <i class="fa-solid fa-house"></i>
+        <span class="home-tooltip">MENU</span>
+      </button>
+
+      <!-- ══ Living backdrop ══
+           Every layer below is decorative and non-interactive, ordered
+           back-to-front: sky, distant ranges, weather, near ridge, so the
+           parallax drift reads as real depth. -->
+      <div class="sky-stars" aria-hidden="true"></div>
+      <div class="sky-aurora" aria-hidden="true"></div>
+      <div class="storm-flash" aria-hidden="true"></div>
+
+      <div class="ridge ridge-far" aria-hidden="true"></div>
+
+      <!-- Mt. Pinatubo.
+           Drawn from the real massif rather than a storybook cone: after the
+           1991 eruption the summit was blown off, leaving a broad, low,
+           shield-like mountain with a 2.5 km caldera scooped out of the top.
+           It doesn't stand alone either — it sits in the Zambales range, so
+           the sharper subsidiary peaks (Negron to the left, Cuadrado to the
+           right) and the layered ridgelines behind it are part of the
+           silhouette. The flanks carry the deep radial gullies that the
+           post-eruption ash slopes are famous for. -->
+      <div class="volcano" aria-hidden="true">
+        <svg class="volcano-svg" viewBox="0 0 1200 420" preserveAspectRatio="none"
+             xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="massifFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#2b3d5c"/>
+              <stop offset="45%"  stop-color="#141f36"/>
+              <stop offset="100%" stop-color="#060b15"/>
+            </linearGradient>
+            <linearGradient id="massifLit" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%"   stop-color="#ffb05c" stop-opacity="0.30"/>
+              <stop offset="30%"  stop-color="#ea580c" stop-opacity="0.13"/>
+              <stop offset="60%"  stop-color="#000000" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="peakFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#22314c"/>
+              <stop offset="100%" stop-color="#0a1120"/>
+            </linearGradient>
+            <linearGradient id="rangeFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#3a4d73"/>
+              <stop offset="100%" stop-color="#1b2740"/>
+            </linearGradient>
+            <linearGradient id="rimLight" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stop-color="#fcd9a0" stop-opacity="0"/>
+              <stop offset="40%"  stop-color="#fcd9a0" stop-opacity="0.75"/>
+              <stop offset="62%"  stop-color="#ffe9c2" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#fcd9a0" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="gullyGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#f8b878" stop-opacity="0.30"/>
+              <stop offset="45%"  stop-color="#7c2d12" stop-opacity="0.12"/>
+              <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Layered Zambales ridgelines receding behind the massif -->
+          <path class="range-back" fill="url(#rangeFill)"
+                d="M0,420 L0,338 L58,312 L104,332 L163,296 L214,322 L268,286
+                   L322,314 L382,280 L436,308 L498,272 L556,300 L616,268
+                   L674,298 L736,266 L792,296 L850,270 L908,300 L966,274
+                   L1024,304 L1086,278 L1140,306 L1200,282 L1200,420 Z"/>
+
+          <!-- Subsidiary peaks: Negron (left) and Cuadrado (right) -->
+          <path fill="url(#peakFill)"
+                d="M150,420 L232,268 L268,300 L318,212 L372,286 L410,258 L470,420 Z"/>
+          <path fill="url(#peakFill)"
+                d="M760,420 L836,262 L878,300 L926,232 L972,292 L1016,268 L1090,420 Z"/>
+
+          <!-- The massif: broad, low, and asymmetric, with the caldera
+               scooped out of the summit plateau. -->
+          <path class="massif" fill="url(#massifFill)"
+                d="M0,420
+                   L52,398 L118,378 L186,360 L252,336 L306,314
+                   L356,288 L400,262 L444,230 L484,196 L516,162
+                   L536,138 L548,126
+                   L572,134 L600,141 L630,135 L654,124
+                   L672,132 L698,156 L728,188 L762,218
+                   L802,248 L848,274 L894,296 L946,318
+                   L1012,342 L1082,366 L1146,390 L1200,420 Z"/>
+
+          <!-- Warm light spilling from the caldera across the lit flank -->
+          <path class="massif-lit" fill="url(#massifLit)"
+                d="M0,420
+                   L52,398 L118,378 L186,360 L252,336 L306,314
+                   L356,288 L400,262 L444,230 L484,196 L516,162
+                   L536,138 L548,126 L572,134 L600,141
+                   L600,420 Z"/>
+
+          <!-- Radial erosion gullies down the ash flanks -->
+          <g class="gullies" stroke="url(#gullyGrad)" fill="none" stroke-linecap="round">
+            <path d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="3"/>
+            <path d="M572,152 Q556,232 534,308 Q518,366 508,420" stroke-width="2.2"/>
+            <path d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="2.6"/>
+            <path d="M622,152 Q640,232 664,306 Q682,364 696,420" stroke-width="2.2"/>
+            <path d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="3"/>
+            <path d="M534,144 Q486,210 428,272 Q384,320 344,366" stroke-width="1.8"/>
+            <path d="M664,144 Q712,208 772,268 Q818,314 860,358" stroke-width="1.8"/>
+          </g>
+
+          <!-- Lahar descending the gullies. Reuses the exact gully path data
+               above, so the flows track the terrain the artwork already
+               shows. Each is a dashed stroke whose offset animates in one
+               direction only, which is what makes the material read as
+               travelling DOWN the mountain and never back up it. -->
+          <g class="lahar-flows" fill="none" stroke-linecap="round">
+            <path class="lahar lf1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="5"/>
+            <path class="lahar lf2" d="M572,152 Q556,232 534,308 Q518,366 508,420" stroke-width="3.6"/>
+            <path class="lahar lf3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="4.2"/>
+            <path class="lahar lf4" d="M622,152 Q640,232 664,306 Q682,364 696,420" stroke-width="3.6"/>
+            <path class="lahar lf5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="5"/>
+          </g>
+          <!-- Soft halo: a wide translucent stroke under the cores, giving
+               the heat bloom without a per-frame filter pass. -->
+          <g class="lahar-halos" fill="none" stroke-linecap="round">
+            <path class="lahar-glow lf1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="13"/>
+            <path class="lahar-glow lf3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="11"/>
+            <path class="lahar-glow lf5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="13"/>
+          </g>
+
+          <!-- The glowing core, a narrower stroke riding the same paths -->
+          <g class="lahar-cores" fill="none" stroke-linecap="round">
+            <path class="lahar-core lc1" d="M556,150 Q520,224 470,300 Q436,356 408,420" stroke-width="1.8"/>
+            <path class="lahar-core lc3" d="M596,154 Q596,236 594,312 Q592,368 590,420" stroke-width="1.5"/>
+            <path class="lahar-core lc5" d="M644,148 Q676,222 726,296 Q762,352 792,420" stroke-width="1.8"/>
+          </g>
+
+          <!-- Crest rim-light picking out the caldera edge -->
+          <path class="rim-light" fill="none" stroke="url(#rimLight)" stroke-width="2.6"
+                d="M484,196 L516,162 L536,138 L548,126 L572,134 L600,141
+                   L630,135 L654,124 L672,132 L698,156 L728,188"/>
+
+          <!-- The caldera bowl itself -->
+          <ellipse class="caldera-floor" cx="601" cy="136" rx="52" ry="9" fill="#05070d" opacity="0.85"/>
+        </svg>
+
+        <span class="caldera-glow"></span>
+        <span class="plume plume-1"></span>
+        <span class="plume plume-2"></span>
+        <span class="plume plume-3"></span>
+      </div>
+
+      <div class="mist-band" aria-hidden="true"></div>
+      <div class="ridge ridge-near" aria-hidden="true"></div>
+
+      <!-- Weather & particles -->
+      <div class="rain" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="ash" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="embers" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+
+      <!-- ══ Foreground: logo + start button ══ -->
+      <div class="welcome-content">
+        <div class="logo-wrap">
+          <span class="logo-halo" aria-hidden="true"></span>
+          <img class="welcome-logo"
+               src="/lahar-defense/assets/laharaya_logo.png"
+               alt="LAHARAYA" />
+          <!-- Specular sweep. The wrapper is masked to the logo's own shape,
+               and the bar inside it slides across on a transform, so the
+               highlight travels over the artwork itself rather than its
+               bounding box. -->
+          <span class="logo-shine" aria-hidden="true"><span class="shine-bar"></span></span>
+        </div>
+
+        <!-- Tagline. Styled to sit with the logo rather than as plain body
+             copy: carved stone face, warm gradient, and the same amber glow
+             the logo and start button carry. -->
+        <p class="tagline">
+          <span class="tagline-text" data-text="Get Saved or Get Buried!">Get Saved or Get Buried!</span>
+        </p>
+
+        <button (click)="startGame()" class="start-btn" aria-label="Tap to Begin Simulation">
+          <span class="btn-ambient-glow" aria-hidden="true"></span>
+          <span class="btn-ripple-halo" aria-hidden="true"></span>
+          <span class="btn-inner-content">
+            <span class="btn-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="34" height="34">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </span>
+            <span class="btn-text">TAP TO BEGIN</span>
+            <span class="btn-arrow">→</span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Embedded Game Simulation Frame -->
+    <iframe *ngIf="gameStarted" class="game-frame w-full h-full border-0 block" [src]="gameUrl"></iframe>
+  </div>
+</div>

@@ -1,0 +1,150 @@
+<div class="kiosk">
+  <div class="nav-container px-3 py-3 flex justify-between z-50">
+        <div class="nav-logo">
+            <a href = ""><img src = "/assets/images/logos/mainlogo.png"></a>
+        </div>
+
+        <a (click)="goBack()" class="home pt-5 pointer-events-auto cursor-pointer" aria-label="Back to previous page">
+            <i class="fa-solid fa-circle-chevron-left text-7xl text-[#D5A822]"></i>
+        </a>
+    </div>
+
+    <div class="title-image absolute inset-0 flex justify-center items-start z-0 mt-5">
+  <img src="/assets/images/logos/relive.png" class="h-35 w-auto">
+</div>
+
+  <div class="kiosk__body z-50">
+    <div class="canvas-wrap mt-5">
+      <canvas #canvas></canvas>
+      <ng-container *ngFor="let c of [currentChapter]; trackBy: trackChapter">
+        <div class="canvas-tag fade-in fade-in--fast">{{ c.numeral }} &middot; {{ c.year }}</div>
+      </ng-container>
+      <button type="button" class="canvas-mute" (click)="toggleMute()" [attr.aria-pressed]="audioMuted"
+        [attr.aria-label]="audioMuted ? 'Unmute ambient sound' : 'Mute ambient sound'">
+        {{ audioMuted ? '🔇' : '🔊' }}
+      </button>
+      <div class="canvas-badge fade-in fade-in--fast" *ngIf="isErupting">{{ phase | uppercase }}</div>
+      <div class="canvas-badge canvas-badge--calm fade-in fade-in--fast"
+        *ngIf="!isErupting && currentChapter.id === 'aftermath'">ERUPTION ENDED</div>
+    </div>
+
+    <ng-container *ngFor="let c of [currentChapter]; trackBy: trackChapter">
+      <section class="info-panel">
+        <div class="info-panel__grid">
+          <div class="info-panel__text fade-in">
+            <span class="info-panel__eyebrow">Chapter {{ c.numeral }}</span>
+            <h2>{{ c.title | uppercase }}</h2>
+            <span class="info-panel__year">{{ c.year }}</span>
+            <p class="info-panel__desc">{{ c.description }}</p>
+            <ul class="info-panel__bullets" *ngIf="c.bullets.length">
+              <li *ngFor="let b of c.bullets">{{ b }}</li>
+            </ul>
+          </div>
+
+          <div class="info-panel__stats fade-in">
+            <div class="stat-row" *ngFor="let s of c.stats">
+              <span class="stat-row__icon">{{ s.icon }}</span>
+              <span class="stat-row__text">
+                <span class="stat-row__label">{{ s.label }}</span>
+                <span class="stat-row__value">{{ s.value }}</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="info-panel__photo fade-in" *ngIf="c.image">
+            <div class="info-panel__photo-fallback">
+              <span class="info-panel__photo-icon">{{ c.icon }}</span>
+            </div>
+            <img [src]="c.image" [alt]="c.title" (error)="onImageError($event)" />
+            <span class="info-panel__photo-date" *ngIf="c.photoDate">{{ c.photoDate }}</span>
+          </div>
+        </div>
+
+
+        <div class="eruption-block fade-in" *ngIf="c.id === 'eruption'">
+          <button class="panel__erupt" [class.panel__erupt--active]="isErupting"
+            [disabled]="isErupting" (click)="triggerEruption()">
+            {{ phase === 'idle' ? 'Trigger the Eruption' : (phase | uppercase) }}
+          </button>
+          <div class="eruption-block__readout" *ngIf="displayedPlume > 0">
+            Ash column climbing: <strong>{{ displayedPlume }} km</strong>
+          </div>
+          <div class="eruption-block__actions">
+            <button *ngIf="eruptionWitnessed || phase !== 'idle'" type="button" class="btn-ghost"
+              (click)="restartEruption()">
+              &#8635; Restart Eruption
+            </button>
+            <button *ngIf="eruptionWitnessed" type="button" class="btn-ghost" (click)="continueToAftermath()">
+              Continue to Aftermath &rarr;
+            </button>
+          </div>
+        </div>
+
+        <div class="status-panel fade-in" *ngIf="c.id === 'aftermath'">
+          <div class="status-panel__head">
+            <span class="status-panel__badge">&#10003; Eruption has ended</span>
+            <span class="status-panel__note">The explosion is over &mdash; its consequences are not.</span>
+          </div>
+          <dl class="status-panel__grid">
+            <div class="status-row" *ngFor="let s of aftermathStatus">
+              <dt class="status-row__label">{{ s.label }}</dt>
+              <dd class="status-row__value">{{ s.value }}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="aftermath-grid fade-in" *ngIf="c.id === 'aftermath'">
+          <div class="metric" *ngFor="let s of aftermathStats">
+            <span class="metric__label">{{ s.label }}</span>
+            <span class="metric__value">{{ s.value }}</span>
+            <span class="metric__hint">{{ s.hint }}</span>
+          </div>
+        </div>
+
+        <div class="info-panel__nav">
+          <button type="button" class="nav-btn nav-btn--prev" (click)="goPrevious()" [disabled]="!canGoBack">
+            &larr; Previous
+          </button>
+          <button *ngIf="c.id !== 'aftermath' && c.id !== 'eruption'" type="button"
+            class="nav-btn nav-btn--next" (click)="goNext()" [disabled]="!canGoNext">
+            Next Chapter &rarr;
+          </button>
+          <button *ngIf="c.id === 'aftermath'" type="button" class="nav-btn nav-btn--next" (click)="replay()">
+            Replay from the Beginning &#8635;
+          </button>
+        </div>
+      </section>
+    </ng-container>
+
+    <nav class="chapter-rail" aria-label="Eruption chapters">
+      <span class="chapter-rail__heading">Explore the Timeline of the 1991 Eruption</span>
+      <ol class="chapter-rail__grid">
+        <li *ngFor="let c of chapters; let i = index"
+          class="chapter-card"
+          [class.chapter-card--active]="i === chapterIndex"
+          [class.chapter-card--done]="i < chapterIndex"
+          [class.chapter-card--locked]="!isUnlocked(i)"
+          [attr.aria-current]="i === chapterIndex ? 'step' : null"
+          [attr.aria-disabled]="!isUnlocked(i)"
+          (click)="goToChapter(i)">
+          <div class="chapter-card__photo" *ngIf="c.image">
+            <div class="chapter-card__photo-fallback">
+              <span>{{ c.icon }}</span>
+            </div>
+            <img [src]="c.image" [alt]="c.title" (error)="onImageError($event)" />
+          </div>
+          <span class="chapter-card__badge" [class.chapter-card__badge--done]="i < chapterIndex">
+            <ng-container *ngIf="!isUnlocked(i)">&#128274;</ng-container>
+            <ng-container *ngIf="isUnlocked(i) && i < chapterIndex">&#10003;</ng-container>
+            <ng-container *ngIf="isUnlocked(i) && i >= chapterIndex">&#9679;</ng-container>
+          </span>
+          <div class="chapter-card__body">
+            <span class="chapter-card__numeral">{{ c.numeral }}</span>
+            <span class="chapter-card__title">{{ c.title }}</span>
+            <span class="chapter-card__year">{{ c.year }}</span>
+          </div>
+        </li>
+      </ol>
+    </nav>
+  </div>
+</div>

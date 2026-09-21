@@ -1,0 +1,3647 @@
+/* ================================================================
+   SELF-HOSTED FONTS (offline kiosk)
+   ----------------------------------------------------------------
+   This exhibit runs with no internet, so the fonts are served from
+   assets/fonts/ instead of a CDN. Files are woff2 (latin subset)
+   from the Fontsource distributions; licences sit alongside them:
+     Nunito       - SIL Open Font License 1.1
+     Luckiest Guy - Apache License 2.0
+     Baloo 2      - SIL Open Font License 1.1
+   font-display: swap keeps text visible if a file is ever missing.
+   ================================================================ */
+@font-face { font-family:'Nunito'; font-style:normal; font-weight:400;
+  src:url('assets/fonts/nunito-latin-400-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:italic; font-weight:400;
+  src:url('assets/fonts/nunito-latin-400-italic.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:normal; font-weight:600;
+  src:url('assets/fonts/nunito-latin-600-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:italic; font-weight:600;
+  src:url('assets/fonts/nunito-latin-600-italic.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:normal; font-weight:700;
+  src:url('assets/fonts/nunito-latin-700-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:normal; font-weight:800;
+  src:url('assets/fonts/nunito-latin-800-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Nunito'; font-style:normal; font-weight:900;
+  src:url('assets/fonts/nunito-latin-900-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Luckiest Guy'; font-style:normal; font-weight:400;
+  src:url('assets/fonts/luckiest-guy-latin-400-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:400;
+  src:url('assets/fonts/baloo-2-latin-400-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:600;
+  src:url('assets/fonts/baloo-2-latin-600-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:700;
+  src:url('assets/fonts/baloo-2-latin-700-normal.woff2') format('woff2'); font-display:swap; }
+@font-face { font-family:'Baloo 2'; font-style:normal; font-weight:800;
+  src:url('assets/fonts/baloo-2-latin-800-normal.woff2') format('woff2'); font-display:swap; }
+
+/* ============================================================
+   LAHARAYA — PREMIUM VISUAL THEME
+   ============================================================ */
+:root {
+  --mountain-dark: #2d2a26; --mountain-mid: #4a453f; --mountain-light: #6b645d;
+  --lahar: #4d4944; --lahar-light: #7a756f;
+  --grass: #4b5e40; --grass-dark: #2a3822;
+  --panel-bg: #e2e8f0; --panel-border: #94a3b8;
+  --ink: #1e293b; --budget-green: #16a34a; --budget-red: #dc2626; --sun: #fcd34d;
+
+  /* Premium accent tokens */
+  --amber: #f59e0b;
+  --amber-dark: #b45309;
+  --glass-bg: rgba(15, 23, 42, 0.72);
+  --glass-border: rgba(255,255,255,0.16);
+  --glass-shine: rgba(255,255,255,0.08);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: 'Baloo 2', 'Trebuchet MS', sans-serif;
+  background: radial-gradient(ellipse at 30% 20%, #1a2a42 0%, #0b1220 60%, #060a12 100%);
+  overflow: hidden;
+  touch-action: none;
+}
+
+#app {
+  position: relative; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+#gameWrap {
+  position: relative; width: min(99vw, calc(99vh * 540 / 960)); aspect-ratio: 540 / 960;
+  /* --u is ONE canvas pixel. The <canvas> renders in a 540x960 logical
+     space and is stretched to fill this box, so anything drawn on it
+     scales with the box. The HTML HUD used raw px, so it only lined up
+     with the canvas when the box happened to be exactly 540px wide —
+     on a wider screen the canvas wave gauge grew out under the budget
+     and goal panels, and on a narrower one the fixed-width panels
+     collided with each other. Every HUD dimension below is expressed
+     in --u so the DOM and the canvas share one coordinate system. */
+  /* One knob for the whole HUD's size. 1 = the reference design size;
+     lower makes every panel, button and indicator smaller together.
+     IMPORTANT: script.js has a matching HUD_SCALE constant for the wave
+     gauge, which is painted on the canvas — keep the two in step or the
+     gauge and the panels will drift apart. */
+  --hud-scale: 0.65;
+  --u: calc(min(99vw, calc(99vh * 540 / 960)) / 540 * var(--hud-scale));
+  border-radius: 20px; overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 0 0 6px #111827,
+    0 0 0 9px rgba(99,102,241,0.15),
+    0 18px 60px rgba(0,0,0,0.8),
+    0 4px 16px rgba(0,0,0,0.5);
+  background: #1e293b;
+}
+
+#gameWrap.danger-mode { animation: shake 0.2s infinite; }
+@keyframes shake {
+  0%   { transform: translate(2px,  2px); }
+  50%  { transform: translate(-2px,-2px); }
+  100% { transform: translate(2px, -2px); }
+}
+
+canvas, #dropLayer {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%; display: block;
+}
+
+/* ================================================================
+   HUD PANELS
+   ================================================================ */
+.hud-panel {
+  position: absolute;
+  background: linear-gradient(160deg, #f0f4f8 0%, #d8e1eb 55%, #c4d0de 100%);
+  border: calc(2 * var(--u)) solid #506380;
+  border-radius: calc(12 * var(--u));
+  box-shadow:
+    0 calc(8 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.38),
+    0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.2),
+    inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.7),
+    inset 0 calc(-10 * var(--u)) calc(14 * var(--u)) calc(-8 * var(--u)) rgba(0,0,0,0.22);
+  padding: calc(12 * var(--u)) calc(15 * var(--u)); color: var(--ink); font-weight: 700;
+}
+
+/* Rivet dot */
+.hud-panel::after {
+  content: '';
+  position: absolute; bottom: calc(5 * var(--u)); left: calc(5 * var(--u));
+  width: calc(5 * var(--u)); height: calc(5 * var(--u)); border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f8fafc, #64748b 75%);
+  box-shadow: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,0.5), inset 0 0 0 calc(1 * var(--u)) rgba(0,0,0,0.15);
+}
+
+/* ---- Budget Panel ---- */
+/* Layout note: the storm gauge is painted on the CANVAS as a full-width
+   strip across the very top (y 6-46). It used to sit in the gap BETWEEN
+   these two panels, which forced both to be narrow; with it moved to its
+   own row the panels get the whole width and can be read at a glance from
+   across a kiosk. */
+#budgetPanel {
+  top: calc(64 * var(--u)); left: calc(15 * var(--u)); width: calc(228 * var(--u)); height: calc(122 * var(--u)); font-size: calc(22 * var(--u)); text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+}
+#budgetPanel::before {
+  content: '';
+  position: absolute; top: calc(-2 * var(--u)); right: calc(-2 * var(--u));
+  width: calc(24 * var(--u)); height: calc(24 * var(--u));
+  background: repeating-linear-gradient(45deg, #fbbf24 0 calc(5 * var(--u)), #1f2937 calc(5 * var(--u)) calc(10 * var(--u)));
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  border-radius: 0 calc(10 * var(--u)) 0 0;
+  box-shadow: calc(-1 * var(--u)) calc(1 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,0.4);
+}
+/* Amber top-border accent */
+#budgetPanel::after {
+  content: '';
+  position: absolute; top: calc(-2 * var(--u)); left: calc(-2 * var(--u)); right: calc(-2 * var(--u));
+  height: calc(3 * var(--u));
+  background: linear-gradient(90deg, transparent, #f59e0b 40%, #fcd34d 60%, transparent);
+  border-radius: calc(12 * var(--u)) calc(12 * var(--u)) 0 0;
+  opacity: 0.85;
+}
+#budgetPanel .label {
+  font-size: calc(17 * var(--u)); letter-spacing: calc(1 * var(--u)); opacity: .7;
+  text-transform: uppercase; margin-bottom: calc(3 * var(--u));
+}
+#budgetPanel .amount { font-size: calc(36 * var(--u)); color: var(--budget-green); transition: color .2s; }
+#budgetPanel .amount.low { color: var(--budget-red); }
+#budgetPanel .amount.boost { animation: budgetBoost 0.5s ease; }
+@keyframes budgetBoost {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.28); color: #4ade80; text-shadow: 0 0 12px rgba(74,222,128,.8); }
+  100% { transform: scale(1); }
+}
+
+#budgetBar {
+  width: 100%; height: calc(15 * var(--u));
+  background: linear-gradient(180deg, #c8d4df 0%, #dbe3ec 100%);
+  border-radius: calc(8 * var(--u)); margin-top: calc(8 * var(--u)); overflow: hidden;
+  box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.25);
+}
+#budgetBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  width: 100%; transition: width 0.1s linear, background .3s;
+  box-shadow: inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.35);
+}
+
+/* ---- Goal Panel ---- */
+#goalPanel {
+  top: calc(64 * var(--u)); right: calc(15 * var(--u)); width: calc(228 * var(--u)); height: calc(122 * var(--u)); font-size: calc(19 * var(--u)); text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+  transition: border-color .3s;
+}
+/* The heading used to sit in alarm-red even at full health, so the panel
+   read as a warning before anything had gone wrong. It now tracks the
+   actual state of the town. */
+#goalPanel.safe    .label { color: #15803d; }
+#goalPanel.caution .label { color: #b45309; }
+#goalPanel.danger  .label { color: var(--budget-red); }
+#goalPanel.danger { border-color: #b91c1c; }
+#goalPanel::before {
+  content: '';
+  position: absolute; top: calc(-2 * var(--u)); left: calc(-2 * var(--u));
+  width: calc(24 * var(--u)); height: calc(24 * var(--u));
+  background: repeating-linear-gradient(-45deg, #fbbf24 0 calc(5 * var(--u)), #1f2937 calc(5 * var(--u)) calc(10 * var(--u)));
+  clip-path: polygon(0 0, 0 100%, 100% 0);
+  border-radius: calc(10 * var(--u)) 0 0 0;
+  box-shadow: calc(1 * var(--u)) calc(1 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,0.4);
+}
+#goalPanel::after { left: auto; right: calc(5 * var(--u)); }
+#goalPanel .label {
+  font-size: calc(17 * var(--u)); font-weight: 800; letter-spacing: calc(.4 * var(--u)); text-transform: uppercase;
+  color: var(--budget-red); margin-bottom: calc(2 * var(--u)); white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: calc(4 * var(--u));
+}
+#goalPanel .label::before { content: '🛡️'; font-size: calc(16 * var(--u)); }
+.goal-counter {
+  font-size: calc(25 * var(--u)); font-weight: 800; color: var(--ink); opacity: .9;
+  transition: color .2s; line-height: 1.1;
+}
+.goal-counter .gc-sub { font-size: calc(15 * var(--u)); font-weight: 700; opacity: .6; }
+.goal-counter.warning { color: var(--budget-red); opacity: 1; }
+/* A town has up to ~20 structures. One dot each meant a row far wider than
+   the panel, so it scrolled horizontally and most of the town's status was
+   simply off-screen — you cannot count 17 tiny dots at kiosk distance
+   anyway. Now the NAMED landmarks (church, school, robot, monument,
+   bridges) keep their own dots, because losing one is a distinct event,
+   and the ordinary houses are summarised by a single integrity bar. */
+#houseDots {
+  display: flex; flex-direction: column; align-items: stretch; gap: calc(5 * var(--u));
+  margin-top: calc(6 * var(--u)); max-width: 100%;
+}
+.lm-row {
+  display: flex; justify-content: center; align-items: center; gap: calc(6 * var(--u));
+  flex-wrap: wrap; min-height: calc(22 * var(--u));
+}
+.village-bar {
+  position: relative; height: calc(16 * var(--u)); border-radius: calc(8 * var(--u)); overflow: hidden;
+  background: linear-gradient(180deg, #c8d4df 0%, #dbe3ec 100%);
+  box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.25);
+}
+.village-bar-fill {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  box-shadow: inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.35);
+  transition: width .35s ease, background .3s;
+}
+.village-bar-fill.caution { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+.village-bar-fill.danger  { background: linear-gradient(90deg, #f87171, #dc2626); }
+/* Tick per house, so the bar still reads as "individual homes" rather
+   than an abstract percentage. */
+.village-bar-ticks {
+  position: absolute; inset: 0; display: flex; pointer-events: none;
+}
+.village-bar-ticks span {
+  flex: 1 1 0; border-right: calc(1 * var(--u)) solid rgba(255,255,255,0.4);
+}
+.village-bar-ticks span:last-child { border-right: 0; }
+
+.landmark-dot {
+  width: calc(22 * var(--u)); height: calc(22 * var(--u)); border-radius: calc(5 * var(--u)); background: #bbaea0;
+  border: calc(2 * var(--u)) solid #5a4b3c;
+  box-shadow: inset 0 calc(-2 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.18), 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.2);
+  transform: rotate(45deg); transition: background .3s, transform .2s;
+  position: relative;
+}
+.landmark-dot.lost { background: var(--budget-red); border-color: #7f1d1d; transform: rotate(45deg) scale(1.1); }
+/* ✕ marks destroyed structures explicitly, rather than relying on the
+   red color change alone to convey "lost" (helps colorblind visitors,
+   and just reads faster at a glance). Counter-rotated -45deg since the
+   diamond shape itself is rotated +45deg — keeps the mark upright. */
+.landmark-dot.lost::after {
+  content: '✕'; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  font-size: calc(13 * var(--u)); font-weight: 900; color: #fff; line-height: 1;
+}
+
+.school-dot {
+  width: calc(20 * var(--u)); height: calc(20 * var(--u)); border-radius: calc(4 * var(--u)); background: #adc178;
+  border: calc(2 * var(--u)) solid #3c5a2b;
+  box-shadow: inset 0 calc(-2 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.18), 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.2);
+  transition: background .3s, transform .2s;
+  position: relative;
+}
+.school-dot.lost { background: var(--budget-red); border-color: #7f1d1d; transform: scale(1.1); }
+.school-dot.lost::after {
+  content: '✕'; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(12 * var(--u)); font-weight: 900; color: #fff; line-height: 1;
+}
+
+.house-dot {
+  width: calc(14 * var(--u)); height: calc(14 * var(--u)); border-radius: 50%; background: #e2e8f0;
+  border: calc(2 * var(--u)) solid var(--grass-dark);
+  box-shadow: inset 0 calc(-2 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.18), 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.2);
+  transition: background .3s, transform 0.2s;
+  position: relative;
+}
+.house-dot.lost { background: var(--budget-red); border-color: #7f1d1d; transform: scale(1.1); }
+.house-dot.lost::after {
+  content: '✕'; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(8 * var(--u)); font-weight: 900; color: #fff; line-height: 1;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 4px 10px rgba(0,0,0,.25), 0 0 0 0 rgba(63, 198, 255, 0.65); }
+  70%  { box-shadow: 0 4px 10px rgba(0,0,0,.25), 0 0 0 12px rgba(63, 198, 255, 0); }
+  100% { box-shadow: 0 4px 10px rgba(0,0,0,.25), 0 0 0 0 rgba(63, 198, 255, 0); }
+}
+
+/* ---- Rain Panel ---- */
+#rainPanel {
+  top: calc(188 * var(--u)); left: calc(15 * var(--u)); width: calc(228 * var(--u)); height: calc(96 * var(--u));
+  display: flex; align-items: center; gap: calc(12 * var(--u));
+  cursor: pointer; user-select: none; font-size: calc(21 * var(--u));
+  /* Primary call to action: saturated amber, so it reads as "press me"
+     against the neutral parchment of the read-only panels. */
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 52%, #d97706 100%) !important;
+  border-color: #a16207 !important;
+  color: #43230a;
+  box-shadow: 0 calc(6 * var(--u)) 0 #92400e,
+              0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.4),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.7);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.2s;
+  position: relative; overflow: hidden;
+  animation: startPulse 1.9s ease-in-out infinite;
+}
+/* The pulse is an invitation, so it stops the moment the storm is running. */
+@keyframes startPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.025); }
+}
+#rainPanel.active {
+  animation: none;
+  /* Running state is informational, not a button — drop back to parchment. */
+  background: linear-gradient(180deg, #f4f8fc 0%, var(--panel-bg) 100%) !important;
+  border-color: #4a5c74 !important;
+  color: var(--ink);
+  box-shadow: 0 calc(5 * var(--u)) 0 #55677e, 0 calc(8 * var(--u)) calc(18 * var(--u)) rgba(0,0,0,0.35);
+}
+/* Amber warning stripe along the left edge — signals this is the primary
+   action waiting on the player, distinguishing it at a glance from the
+   purely informational panels (budget/goal) beside it. */
+#rainPanel::before {
+  content: '';
+  position: absolute; top: 0; left: 0; bottom: 0; width: calc(6 * var(--u));
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+}
+#rainPanel::after { right: calc(5 * var(--u)); left: auto; }
+#rainPanel:not(.active):hover { transform: translateY(calc(-2 * var(--u))); filter: brightness(1.04); }
+#rainPanel:not(.active):active { transform: translateY(calc(2 * var(--u))); box-shadow: 0 calc(1 * var(--u)) 0 #55677e, 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,.25); }
+#rainPanel:not(.active) { animation: pulse 2s infinite; }
+#rainPanel.active {
+  filter: brightness(0.85) grayscale(30%);
+  cursor: default; animation: none;
+  box-shadow: inset 0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(0,0,0,.3), 0 calc(2 * var(--u)) 0 #55677e;
+  transform: none;
+}
+#rainIcon {
+  width: calc(58 * var(--u)); height: calc(58 * var(--u)); flex-shrink: 0; border-radius: 50%;
+  /* Darker, cooler disc so the pale cloud actually reads against it —
+     the old near-white fill washed the icon out completely. */
+  background: radial-gradient(circle at 40% 32%, #dceefb 30%, #8fb6d4 100%);
+  box-shadow: inset 0 calc(-3 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,.14), inset 0 calc(2 * var(--u)) calc(3 * var(--u)) rgba(255,255,255,.75);
+  padding: calc(3 * var(--u));
+  margin-left: calc(4 * var(--u));
+}
+/* Droplets fall in a staggered loop while the storm hasn't started —
+   a live preview of what "Tap to Start" is about to unleash. Settles
+   to static once .active is applied (the filter/grayscale on the panel
+   already conveys "spent" for the rest of the HUD). */
+#rainPanel:not(.active) #rainDrops line {
+  animation: dropFall 1s ease-in infinite;
+  transform-origin: center;
+}
+#rainDrops line:nth-child(1) { animation-delay: 0s; }
+#rainDrops line:nth-child(2) { animation-delay: 0.2s; }
+#rainDrops line:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dropFall {
+  0%   { transform: translateY(-3px); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { transform: translateY(4px); opacity: 0; }
+}
+#rainStatus { font-size: calc(23 * var(--u)); font-weight: 900; text-transform: uppercase; letter-spacing: calc(0.4 * var(--u)); opacity: 1; line-height: 1.12; }
+#rainPanel.active #rainStatus { font-size: calc(20 * var(--u)); font-weight: 800; opacity: .9; }
+
+/* ---- Menu Button ---- */
+/* Sits under the goal panel (which now ends at y=170). */
+#instructionsBtn {
+  position: absolute; top: calc(196 * var(--u)); right: calc(15 * var(--u)); height: calc(50 * var(--u)); padding: 0 calc(20 * var(--u)); border-radius: calc(25 * var(--u));
+  background: linear-gradient(180deg, #6b7c92 0%, #4a5c74 100%);
+  border: calc(3 * var(--u)) solid #3a4a5f; color: #eef3f8;
+  font-weight: 800; font-size: calc(19 * var(--u)); letter-spacing: calc(0.2 * var(--u)); white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: calc(7 * var(--u));
+  cursor: pointer; opacity: 0.92;
+  /* Deliberately quiet: a low-frequency action should not out-shout the
+     primary one. The amber ring it used to carry is now on START. */
+  box-shadow: 0 calc(4 * var(--u)) 0 #35435a, 0 calc(6 * var(--u)) calc(12 * var(--u)) rgba(0,0,0,.32);
+  z-index: 30; transition: transform 0.12s ease, box-shadow 0.12s ease, filter .15s, opacity .15s;
+}
+#instructionsBtn:hover { opacity: 1; }
+#instructionsBtn:hover { transform: translateY(calc(-2 * var(--u))); filter: brightness(1.06); }
+#instructionsBtn:active {
+  transform: translateY(calc(3 * var(--u)));
+  box-shadow: 0 calc(1 * var(--u)) 0 #5c6f88, 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,.3), 0 0 0 calc(3 * var(--u)) rgba(251,191,36,0.5);
+}
+
+/* ================================================================
+   RETRACTABLE TOOLBOX
+   ================================================================ */
+#toolbox {
+  /* Height is explicit rather than top+bottom: scaling BOTH insets would
+     have made the panel taller as the HUD got smaller. */
+  position: absolute; top: 50%; right: 0; height: calc(462 * var(--u)); width: calc(186 * var(--u));
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, #e8edf4 0%, #d4dce8 50%, #c8d3e2 100%);
+  border: calc(3 * var(--u)) solid var(--panel-border);
+  border-right: none; border-radius: calc(15 * var(--u)) 0 0 calc(15 * var(--u));
+  box-shadow: calc(-6 * var(--u)) calc(4 * var(--u)) calc(18 * var(--u)) rgba(0,0,0,.35);
+  padding: calc(34 * var(--u)) calc(10 * var(--u)) calc(12 * var(--u));
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  transition: transform .3s cubic-bezier(0.25, 1, 0.5, 1); z-index: 40;
+}
+#toolbox.collapsed { transform: translateY(-50%) translateX(calc(186 * var(--u))); }
+#toolbox .tb-title {
+  position: absolute; top: calc(9 * var(--u)); left: 50%; transform: translateX(-50%);
+  color: var(--ink); font-size: calc(13 * var(--u)); font-weight: 800; letter-spacing: calc(.5 * var(--u));
+  text-transform: uppercase; white-space: nowrap; opacity: 0.75;
+}
+#toolItemsContainer {
+  width: 100%; display: flex; flex-direction: column; gap: calc(10 * var(--u));
+  overflow-y: auto; overflow-x: hidden; padding-bottom: calc(4 * var(--u));
+  max-height: 100%;
+}
+#toolItemsContainer::-webkit-scrollbar { width: calc(3 * var(--u)); }
+#toolItemsContainer::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: calc(2 * var(--u)); }
+
+#toolboxToggle {
+  /* 42% rather than dead centre: at 50% the handle sat at y 434-526 and
+     clipped the roof of the Porac house at x505,y564. This clears every
+     building in all three towns while staying easy to reach. */
+  position: absolute; left: calc(-42 * var(--u)); top: 42%; transform: translateY(-50%);
+  width: calc(42 * var(--u)); height: calc(70 * var(--u));
+  background: linear-gradient(90deg, #edf1f7 0%, #d4dce8 100%);
+  border: calc(3 * var(--u)) solid var(--panel-border); border-right: none;
+  border-radius: calc(13 * var(--u)) 0 0 calc(13 * var(--u));
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: calc(-4 * var(--u)) calc(2 * var(--u)) calc(8 * var(--u)) rgba(0,0,0,.18), inset calc(2 * var(--u)) 0 0 rgba(255,255,255,.45);
+  transition: filter .15s, transform .15s;
+}
+#toolboxToggle:hover { filter: brightness(1.06); transform: translateY(-50%) translateX(calc(-3 * var(--u))); }
+#toolboxToggle:active { filter: brightness(0.94); transform: translateY(-50%); }
+/* Gentle recurring nudge while collapsed — the tab is easy to miss on a
+   kiosk if nothing ever calls attention to it. Stops once expanded. */
+#toolbox.collapsed #toolboxToggle { animation: toggleNudge 3.2s ease-in-out infinite; }
+@keyframes toggleNudge {
+  0%, 80%, 100% { transform: translateY(-50%) translateX(0); }
+  88%           { transform: translateY(-50%) translateX(-6px); }
+  94%           { transform: translateY(-50%) translateX(-2px); }
+}
+#toolboxToggle svg { width: calc(26 * var(--u)); height: calc(26 * var(--u)); fill: var(--ink); transition: transform .3s ease; }
+#toolbox.collapsed #toolboxToggle svg { transform: rotate(180deg); }
+
+.tool-item {
+  width: 100%; display: flex; flex-direction: row; align-items: center; gap: calc(9 * var(--u));
+  cursor: pointer; padding: calc(9 * var(--u)) calc(9 * var(--u)); border-radius: calc(14 * var(--u));
+  background: linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.3) 100%);
+  border: calc(2 * var(--u)) solid transparent;
+  box-shadow: 0 calc(2 * var(--u)) calc(5 * var(--u)) rgba(0,0,0,.1), inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.6);
+  transition: transform .15s ease, background .15s, border-color .15s, box-shadow .15s;
+  touch-action: none;
+  position: relative;
+}
+/* Grip-dot cue removed — placement is now tap-to-select then tap-to-place,
+   so the draggable hint no longer applies. */
+.tool-item::after {
+  content: '';
+  display: none;
+}
+.tool-item:hover:not(.disabled) {
+  background: linear-gradient(180deg, #ffffff 0%, #f0f4f8 100%);
+  border-color: rgba(148, 163, 184, 0.7);
+  box-shadow: 0 calc(6 * var(--u)) calc(14 * var(--u)) rgba(0,0,0,.18), inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.8);
+  transform: translateY(calc(-2 * var(--u)));
+}
+.tool-item:active:not(.disabled) { transform: translateY(0); box-shadow: 0 calc(1 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.12); }
+/* Armed = this tool is selected and the next tap on the map places it.
+   Defined in the base rules (and repeated with !important) because the
+   themed sections later in this sheet re-style .tool-item and were
+   overriding the selected state, leaving no visible feedback. */
+.tool-item.armed {
+  border-color: #f59e0b !important;
+  background: linear-gradient(180deg, #fff8e6 0%, #ffeec4 100%) !important;
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(245, 158, 11, 0.35),
+              0 calc(4 * var(--u)) calc(10 * var(--u)) rgba(0,0,0,.2) !important;
+}
+.tool-item.armed .tool-name { color: #7c2d12; }
+.tool-item.armed .tool-icon {
+  background: radial-gradient(circle at 50% 34%, #fffdf5 0%, #ffe6b0 100%);
+  box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(120,60,0,0.16);
+}
+/* A small chevron on the armed card pointing at the map */
+.tool-item.armed::before {
+  content: '';
+  position: absolute; left: calc(-7 * var(--u)); top: 50%;
+  width: calc(10 * var(--u)); height: calc(10 * var(--u));
+  transform: translateY(-50%) rotate(45deg);
+  background: #f59e0b;
+  border-radius: calc(2 * var(--u));
+}
+.tool-item.dragging { opacity: .35; transform: scale(0.88); }
+.tool-item.disabled { opacity: .55; cursor: not-allowed; filter: grayscale(45%); box-shadow: none; }
+.tool-icon {
+  width: calc(52 * var(--u)); height: calc(52 * var(--u));
+  flex: 0 0 auto;
+  background: radial-gradient(circle at 50% 34%, #ffffff 0%, #e6ecf5 100%);
+  border-radius: 50%;
+  padding: calc(4 * var(--u));
+  box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.12),
+              0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,0.08);
+}
+/* Name over price, left-aligned beside the icon */
+.tool-text {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: calc(3 * var(--u)); min-width: 0; flex: 1 1 auto;
+}
+.tool-name {
+  font-size: calc(15 * var(--u)); font-weight: 800; color: var(--ink);
+  text-transform: uppercase; text-align: left; line-height: 1.05;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.tool-price {
+  font-size: calc(15 * var(--u)); font-weight: 800; color: #15803d;
+  background: linear-gradient(180deg, #dcfce7, #bbf7d0);
+  border-radius: calc(6 * var(--u)); padding: calc(1 * var(--u)) calc(7 * var(--u));
+  box-shadow: inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.5);
+  white-space: nowrap;
+}
+/* Unaffordable items get an explicit red price tag instead of relying on
+   the grayscale filter alone — color-codes "can't afford" unambiguously. */
+.tool-item.disabled .tool-price {
+  color: #b91c1c;
+  background: linear-gradient(180deg, #fee2e2, #fecaca);
+}
+
+#dragGhost {
+  position: fixed; pointer-events: none; width: 60px; height: 60px;
+  transform: translate(-50%, -50%) scale(1.2); z-index: 999; display: none;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,.5));
+  transition: filter 0.2s;
+}
+
+/* ================================================================
+   OVERLAY & SCREEN CARDS — Glassmorphism
+   ================================================================ */
+#overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(160deg, rgba(8,14,28,0.88) 0%, rgba(15,23,42,0.94) 100%);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; flex-direction: column; text-align: center;
+  color: #fff; padding: 20px;
+  transition: opacity 0.35s;
+}
+#overlay.hidden { opacity: 0; pointer-events: none; }
+#overlay h1 { font-size: clamp(34px, 6.2vw, 50px); margin: 0 0 12px; text-align: center; white-space: nowrap; }
+#overlay p { font-size: 23px; max-width: 460px; margin: 0 0 12px; opacity: .88; line-height: 1.48; }
+#overlay button {
+  font-family: inherit; font-weight: 800; font-size: 26px;
+  padding: 16px 38px; border-radius: 32px; border: none; cursor: pointer;
+  background: var(--sun); color: #78350f;
+  box-shadow: 0 6px 0 #d97706;
+  transition: transform .1s, filter 0.15s;
+}
+#overlay button:hover { filter: brightness(1.1); }
+#overlay button:active { transform: translateY(5px); box-shadow: 0 1px 0 #d97706; }
+
+/* Self-adjusting button row — used on the Mission Objective screen,
+   where the "Return" button only appears mid-round. .action-half items
+   grow to fill leftover space automatically when a sibling is hidden
+   (display:none removes it from the flex layout entirely), so the row
+   never ends up lopsided or overflowing regardless of which buttons are
+   actually showing. .action-full always forces its own row below. */
+.action-row {
+  display: flex; flex-wrap: wrap; gap: 14px; width: 100%;
+}
+.action-half {
+  flex: 1 1 calc(50% - 7px); min-width: 160px;
+}
+.action-full {
+  flex: 1 1 100%;
+}
+
+/* Primary button — amber with shimmer */
+#overlay button.btn-primary {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(180deg, #ffe89c 0%, var(--sun) 55%, #f8c84e 100%);
+  color: #78350f; letter-spacing: .3px;
+  box-shadow: 0 6px 0 #c96e00, 0 12px 28px rgba(217,119,6,0.4);
+  transition: transform .12s ease, box-shadow .12s ease, filter .15s;
+}
+#overlay button.btn-primary::after {
+  content: '';
+  position: absolute; top: 0; left: -80%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.45s ease;
+}
+#overlay button.btn-primary:hover::after { left: 130%; }
+#overlay button.btn-primary:hover {
+  filter: brightness(1.07);
+  transform: translateY(-2px);
+  box-shadow: 0 9px 0 #c96e00, 0 18px 32px rgba(217,119,6,0.45);
+}
+#overlay button.btn-primary:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #c96e00, 0 4px 10px rgba(217,119,6,0.3);
+}
+
+/* Secondary button */
+#overlay button.btn-secondary {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(255,255,255,0.07);
+  color: #e2e8f0;
+  border: 2px solid rgba(255,255,255,0.25);
+  box-shadow: none;
+  transition: transform .12s ease, background .15s, border-color .15s;
+}
+#overlay button.btn-secondary:hover {
+  filter: none;
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.5);
+  transform: translateY(-1px);
+}
+#overlay button.btn-secondary:active {
+  transform: translateY(3px);
+  background: rgba(255,255,255,0.1);
+  box-shadow: none;
+}
+
+/* Success button */
+#overlay button.btn-success {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(180deg, #4ade80 0%, var(--budget-green) 55%, #15803d 100%);
+  color: #fff; letter-spacing: .3px;
+  box-shadow: 0 6px 0 #166534, 0 12px 28px rgba(21,128,61,0.4);
+  transition: transform .12s ease, box-shadow .12s ease, filter .15s;
+}
+#overlay button.btn-success::after {
+  content: '';
+  position: absolute; top: 0; left: -80%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.45s ease;
+}
+#overlay button.btn-success:hover::after { left: 130%; }
+#overlay button.btn-success:hover {
+  filter: brightness(1.07);
+  transform: translateY(-2px);
+  box-shadow: 0 9px 0 #166534, 0 18px 32px rgba(21,128,61,0.45);
+}
+#overlay button.btn-success:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #166534, 0 4px 10px rgba(21,128,61,0.3);
+}
+
+.btn-arrow { font-weight: 900; line-height: 1; transition: transform .15s ease; }
+#overlay button.btn-primary:hover .btn-arrow,
+#overlay button.btn-success:hover .btn-arrow { transform: translateX(4px); }
+#overlay button.btn-secondary:hover .btn-arrow { transform: translateX(-4px); }
+
+/* Screen card — frosted glass */
+.screen-card {
+  background: linear-gradient(160deg, rgba(15,22,40,0.96) 0%, rgba(20,30,52,0.94) 100%);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 22px;
+  padding: 28px;
+  max-width: 520px; width: 92%;
+  color: #ffffff; text-align: center;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.06),
+    0 16px 48px rgba(0,0,0,0.65),
+    inset 0 1px 0 rgba(255,255,255,0.1),
+    inset 0 -1px 0 rgba(0,0,0,0.25);
+  animation: fadeInUp 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: scale(0.96) translateY(14px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+
+/* The Town Profile screen carries the most content (history blurb + the full
+   tool guide), so it gets a noticeably wider panel than the other overlay
+   cards. Still width-capped by a percentage, so it stays responsive and never
+   overflows the game frame on narrow phones. The Mission Objective and Choose
+   Municipality screens are widened to match. */
+#infoCard { max-width: 760px; width: 96%; }
+
+/* ── Town Profile: compact, scannable tool guide ──
+   The previous layout set the history at 30px bold and stacked six long
+   tool paragraphs; the card overflowed so far that only the first tool was
+   ever on screen. History is now a short supporting line and the tools are
+   a two-column grid, so all of them are visible at once. */
+.town-history {
+  font-size: 24px; line-height: 1.42; text-align: center;
+  margin: 0 0 14px; opacity: 0.9;
+}
+.tool-guide-head {
+  font-size: 19px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1px; opacity: 0.7; text-align: left; margin-bottom: 9px;
+}
+.tool-guide {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 8px;
+}
+.tool-guide-notes { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.tg-card {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 9px; border-radius: 11px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  text-align: left;
+}
+.tg-card.wide { background: rgba(255,255,255,0.045); }
+.tg-icon { width: 36px; height: 36px; flex: 0 0 auto; margin-top: 1px; }
+.tg-body { min-width: 0; }
+.tg-name {
+  font-size: 20px; font-weight: 800; line-height: 1.1;
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+}
+.tg-price {
+  font-size: 17px; font-weight: 800; color: #86efac;
+  background: rgba(34,197,94,0.16); border-radius: 5px; padding: 0 6px;
+}
+.tg-line { font-size: 17px; line-height: 1.24; opacity: 0.85; margin-top: 3px; }
+/* Small qualifier on the guide heading — the tools are locked until the
+   storm is running, which players otherwise only discover by tapping. */
+.tg-note { font-weight: 700; text-transform: none; letter-spacing: 0; opacity: 0.75; }
+
+/* Later sections in this sheet push #infoCard #infoCardText up to 33px for
+   the old layout; that ID-on-ID selector outranks a class, so the history
+   line is pinned here with equal specificity. Appended near the end of the
+   file so it wins on order too — see the override block at the bottom. */
+#infoCard .edu-content-box p { font-size: 20px; }
+#objectiveCard, #townCard { max-width: 760px; width: 96%; }
+
+/* ── Mission Objective: scannable kiosk brief ──
+   Replaced a 113-word, four-paragraph block that rendered over 1900px tall
+   (more than twice the screen) and pushed the buttons out of view. Sized so
+   the whole card, buttons included, fits one screen with no scrolling. */
+.mission-brief { text-align: left; }
+#objectiveCard .mission-brief .mo-hook, .mission-brief .mo-hook {
+  font-size: 24px; line-height: 1.35; margin: 0 0 12px;
+  opacity: 0.9; text-align: center;
+}
+#objectiveCard .mission-brief .mo-goal, .mission-brief .mo-goal {
+  font-size: 31px; line-height: 1.22; margin: 0 0 11px;
+  text-align: center; font-weight: 700;
+}
+.mission-brief .mo-goal b { color: #fbbf24; }
+.mission-brief .mo-steps {
+  list-style: none; margin: 0 0 12px; padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.mission-brief .mo-steps li {
+  display: flex; align-items: center; gap: 11px;
+  font-size: 23px; line-height: 1.22;
+}
+.mission-brief .mo-num {
+  flex: 0 0 auto;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; font-weight: 800; color: #451a03;
+  background: linear-gradient(180deg, #fde68a, #f59e0b);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.mission-brief .mo-steps i { opacity: 0.7; font-style: italic; }
+#objectiveCard .mission-brief .mo-tip, .mission-brief .mo-tip {
+  margin: 0; padding: 10px 12px; border-radius: 10px;
+  font-size: 24px; text-align: center; font-weight: 600;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.13);
+}
+
+/* Safety net: nothing inside an overlay card may ever exceed its width, so
+   an oversized image can never push a card past the edge of the screen. */
+#overlay img, .screen-card img { max-width: 100%; height: auto; }
+
+/* The global "#overlay p" rule (23px, max-width 460px) otherwise caps these
+   paragraphs and stops them filling the wider panels. These more-specific
+   rules make the body text bigger and let it span the full panel, centered. */
+#objectiveCard .edu-content-box p { font-size: 30px; max-width: none; text-align: center; }
+#townCard > p { font-size: 27px; max-width: none; text-align: center; }
+
+/* Each municipality card's name + description: bigger, centered, and allowed
+   to fill the wider card (again overriding the global "#overlay p" cap). */
+#townCard .town-info { text-align: center; }
+#townCard .town-info h3 { font-size: 34px; }
+#townCard .town-info p { font-size: 25px; max-width: none; opacity: 0.92; }
+
+#startCard, #endCard {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 18px; padding: 20px 24px; max-width: 480px;
+}
+.legend-row { display: flex; align-items: center; gap: 12px; text-align: left; font-size: 16px; margin: 6px 0; opacity: .9; }
+.legend-row img { width: 28px; height: 28px; flex-shrink: 0; }
+
+/* ================================================================
+   END SCREEN — Score & Grade
+   ================================================================ */
+#endScoreBlock { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 14px 0; }
+
+.grade-badge {
+  width: 58px; height: 58px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 900;
+  border: 2px solid rgba(255,255,255,0.3);
+  background: linear-gradient(160deg, #64748b, #334155);
+  color: #fff; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.grade-S {
+  background: linear-gradient(160deg, #fef3c7, #d97706);
+  border-color: #fef9c3;
+  box-shadow: 0 0 0 3px rgba(253,224,71,0.25), 0 0 20px rgba(251,191,36,0.45), 0 4px 12px rgba(0,0,0,0.4);
+}
+.grade-A {
+  background: linear-gradient(160deg, #86efac, #15803d);
+  border-color: #dcfce7;
+  box-shadow: 0 0 0 3px rgba(74,222,128,0.2), 0 0 16px rgba(34,197,94,0.35), 0 4px 12px rgba(0,0,0,0.4);
+}
+.grade-B { background: linear-gradient(160deg, #93c5fd, #1d4ed8); border-color: #dbeafe; }
+.grade-C { background: linear-gradient(160deg, #fdba74, #c2410c); border-color: #ffedd5; }
+.grade-D { background: linear-gradient(160deg, #fca5a5, #b91c1c); border-color: #fee2e2; }
+
+#endScoreText { text-align: left; }
+#endScoreLabel { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; opacity: .65; }
+#endScoreValue { font-size: 29px; font-weight: 800; }
+#endGradeLabel { font-size: 14px; opacity: .82; margin-top: 2px; }
+#endFactText {
+  display: block; margin-top: 6px; font-size: 15px; line-height: 1.55; opacity: 0.82;
+  border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;
+  font-style: italic;
+}
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+#toast {
+  position: absolute; top: 40%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.82);
+  background: linear-gradient(160deg, rgba(15,23,42,0.97), rgba(20,32,56,0.97));
+  color: #fff; padding: 14px 24px;
+  border-radius: 16px; font-weight: 700; font-size: 19px;
+  opacity: 0; pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.1);
+  transition: opacity .25s, transform .25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 40; text-align: center; max-width: 80%;
+}
+#toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+/* ================================================================
+   TOWN SELECTION CARDS
+   ================================================================ */
+.subtitle { font-size: 16px; opacity: 0.78; margin-bottom: 20px; }
+.town-grid { display: flex; flex-direction: column; gap: 14px; margin-bottom: 10px; }
+
+.town-card {
+  display: flex; align-items: center;
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 12px; text-align: left;
+  transition: all 0.22s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.town-info { min-width: 0; flex: 1; }
+.town-card.selected {
+  background: rgba(56,189,248,0.14);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.18), 0 6px 18px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+
+/* Per-town accent colors on the preview badge */
+.town-card[data-town="bacolor"] .town-preview {
+  background: linear-gradient(160deg, #3d2b1a 0%, #5c3d26 100%);
+  border: 2px solid rgba(180,130,80,0.4);
+  color: #f4d4a0;
+}
+.town-card[data-town="porac"] .town-preview {
+  background: linear-gradient(160deg, #1a3020 0%, #2a5032 100%);
+  border: 2px solid rgba(80,160,90,0.4);
+  color: #a8e4b0;
+}
+.town-card[data-town="angeles"] .town-preview {
+  background: linear-gradient(160deg, #1a2040 0%, #253060 100%);
+  border: 2px solid rgba(80,120,220,0.4);
+  color: #a8c4f4;
+}
+
+.town-preview {
+  font-size: 43px; width: 66px; height: 66px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.25); border-radius: 10px;
+  margin-right: 14px; flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 3px 8px rgba(0,0,0,0.35);
+  transition: box-shadow 0.2s;
+}
+
+.town-preview img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.town-card.selected .town-preview {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 0 12px rgba(56,189,248,0.3), 0 3px 8px rgba(0,0,0,0.35);
+}
+
+.town-info h3 { margin: 0 0 4px 0; font-size: 32px; color: #f1f5f9; }
+.town-info p  { margin: 0 0 8px 0; font-size: 23px; line-height: 1.4; opacity: 0.8; }
+
+.select-town-btn {
+  background: linear-gradient(180deg, #4db8f0, #1e90d0);
+  color: #fff; border: none; border-radius: 8px;
+  padding: 7px 18px; font-weight: 700; font-size: 17px;
+  cursor: pointer; box-shadow: 0 3px 0 #1265a8;
+  transition: filter 0.2s, transform 0.1s;
+}
+.select-town-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.town-card.selected .select-town-btn {
+  background: linear-gradient(180deg, #4ade80, #16a34a);
+  box-shadow: 0 3px 0 #15803d;
+  color: #ffffff;
+}
+
+/* ================================================================
+   EDUCATIONAL CONTENT BOX
+   ================================================================ */
+.edu-content-box {
+  background: linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.04) 100%);
+  border-left: 4px solid #fcd34d;
+  border-radius: 0 8px 8px 0;
+  padding: 16px; text-align: left;
+  margin: 20px 0; font-size: 17px; line-height: 1.6;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+}
+/* ================================================================
+   UI POLISH PASS — "field-console" cohesion
+   ----------------------------------------------------------------
+   Signature motif: a thin volcanic-amber -> monsoon-cyan rule that
+   headers every command card, tying the game's two opposing forces
+   (the volcano and the rain-fed lahar) into one visual language.
+   Everything else stays quiet so that one motif carries the identity.
+   ================================================================ */
+:root {
+  --accent-amber: #f59e0b;
+  --accent-cyan:  #38bdf8;
+  --accent-rule:  linear-gradient(90deg, var(--accent-amber) 0%, #fcd34d 32%, #7dd3fc 68%, var(--accent-cyan) 100%);
+}
+
+/* Deeper, more atmospheric backdrop: a soft top glow + floor vignette
+   give the framed scene a sense of depth behind the menus. */
+#overlay {
+  background:
+    radial-gradient(120% 85% at 50% -5%, rgba(56,189,248,0.10) 0%, transparent 55%),
+    radial-gradient(150% 130% at 50% 118%, rgba(0,0,0,0.55) 0%, transparent 62%),
+    linear-gradient(160deg, rgba(8,14,28,0.90) 0%, rgba(12,18,34,0.95) 100%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Command cards: crisper glass, a faint cool glow off the top edge, and
+   the signature accent rule running across the header. */
+.screen-card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255,255,255,0.12);
+  background:
+    radial-gradient(135% 78% at 50% -12%, rgba(56,189,248,0.11) 0%, transparent 55%),
+    linear-gradient(160deg, rgba(17,25,44,0.97) 0%, rgba(22,32,56,0.95) 100%);
+}
+.screen-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: var(--accent-rule);
+}
+
+/* Titles: a hair tighter, with a quiet accent underline echoing the header
+   rule. Wrapping is allowed now so long titles never clip against the card. */
+#overlay h1 {
+  white-space: normal; text-wrap: balance;
+  font-weight: 800; letter-spacing: 0.4px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.45);
+  padding-bottom: 14px; margin: 0 0 18px;
+  position: relative;
+}
+#overlay h1::after {
+  content: ''; position: absolute; left: 50%; bottom: 0;
+  transform: translateX(-50%);
+  width: 72px; height: 3px; border-radius: 3px;
+  background: var(--accent-rule);
+  opacity: 0.9;
+}
+
+/* Municipality cards: gentle lift on hover, a cooler selected glow that
+   matches the cyan side of the accent, and softly rounded thumbnails. */
+.town-card { cursor: pointer; border-radius: 16px;
+  transition: transform .2s cubic-bezier(.22,1,.36,1), background .2s, border-color .2s, box-shadow .2s; }
+.town-card:hover:not(.selected) {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(125,211,252,0.5);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.42);
+}
+.town-preview { border-radius: 12px; }
+
+/* Accessibility floor the original CSS was missing ------------------- */
+
+/* Clear keyboard focus on every interactive control. */
+button:focus-visible,
+.tool-item:focus-visible,
+.town-card:focus-visible,
+#instructionsBtn:focus-visible,
+#rainPanel:focus-visible {
+  outline: calc(3 * var(--u)) solid var(--accent-cyan);
+  outline-offset: calc(3 * var(--u));
+}
+
+/* Respect reduced-motion: calm the decorative CSS animations/transitions.
+   (Gameplay itself is canvas-driven and stays fully animated.) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  #gameWrap.danger-mode { animation: none !important; }
+}
+
+/* ================================================================
+   PANEL REFINEMENT — cohesion for the persistent on-screen panels
+   (budget/goal instruments + the toolbox and its tool cards).
+   Positions, sizes, text colours and the riveted details are all
+   left intact; this only deepens the material and tightens the
+   interactive states, and ties the toolbox to the amber->cyan
+   identity used on the menu cards.
+   ================================================================ */
+
+/* Informational instruments: a slightly deeper, cleaner drop + glass sheen. */
+#budgetPanel, #goalPanel {
+  box-shadow:
+    0 calc(10 * var(--u)) calc(24 * var(--u)) rgba(8,14,28,0.36),
+    0 calc(2 * var(--u)) calc(5 * var(--u)) rgba(0,0,0,0.18),
+    inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.88),
+    inset 0 calc(-12 * var(--u)) calc(16 * var(--u)) calc(-10 * var(--u)) rgba(0,0,0,0.20);
+}
+
+/* Toolbox shell: crisper glass to match the HUD, deeper cast shadow. */
+#toolbox {
+  background: linear-gradient(180deg, #eef2f8 0%, #dbe3ee 55%, #ccd6e4 100%);
+  border: calc(2 * var(--u)) solid rgba(80,99,128,0.85);
+  border-right: none;
+  box-shadow: calc(-8 * var(--u)) calc(6 * var(--u)) calc(22 * var(--u)) rgba(8,14,28,0.40);
+}
+#toolbox .tb-title { color: #33415a; opacity: 0.92; }
+#toolbox .tb-title::after {
+  content: ''; display: block; height: calc(2 * var(--u)); width: calc(26 * var(--u));
+  margin: calc(3 * var(--u)) auto 0; border-radius: calc(2 * var(--u));
+  background: var(--accent-rule);
+}
+
+/* Tool cards: framed, tactile, with clearer states. */
+.tool-item {
+  border-radius: calc(13 * var(--u));
+  background: linear-gradient(180deg, #ffffff 0%, #eef2f8 100%);
+  border: calc(2 * var(--u)) solid rgba(148,163,184,0.35);
+  box-shadow: 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(8,14,28,0.12), inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.9);
+}
+.tool-item:hover:not(.disabled) {
+  border-color: rgba(56,189,248,0.6);
+  box-shadow: 0 calc(8 * var(--u)) calc(18 * var(--u)) rgba(8,14,28,0.22), inset 0 calc(1 * var(--u)) 0 #fff;
+  transform: translateY(calc(-3 * var(--u)));
+}
+.tool-item:active:not(.disabled) {
+  transform: translateY(calc(-1 * var(--u)));
+  box-shadow: 0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(8,14,28,0.18);
+}
+/* Armed (tap-to-place selected) — formalised here instead of inline JS. */
+.tool-item.armed {
+  border-color: #22c55e;
+  background: linear-gradient(180deg, #f0fff5 0%, #dcfce7 100%);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(34,197,94,0.45), 0 calc(8 * var(--u)) calc(18 * var(--u)) rgba(8,14,28,0.24);
+  transform: translateY(calc(-2 * var(--u)));
+}
+.tool-icon {
+  background: radial-gradient(circle at 50% 36%, #ffffff 0%, #e7edf5 100%);
+  box-shadow: inset 0 calc(2 * var(--u)) calc(5 * var(--u)) rgba(0,0,0,0.10), inset 0 calc(-1 * var(--u)) 0 rgba(255,255,255,0.85);
+}
+.tool-price {
+  box-shadow: inset 0 calc(1 * var(--u)) 0 rgba(255,255,255,0.6), 0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,0.12);
+}
+
+/* ================================================================
+   OVERALL PANEL COHESION
+   The amber->cyan signature now marks EVERY panel so the HUD
+   instruments, the rain/start control, the toolbox and the menu
+   cards all read as one family:
+     - budget & goal      -> a top accent rule
+     - rain / start       -> its left action stripe (same colours)
+     - toolbox            -> title underline (added earlier)
+     - menu cards         -> header rule (added earlier)
+   ================================================================ */
+.hud-panel { border-radius: calc(14 * var(--u)); }
+
+#budgetPanel, #goalPanel {
+  background:
+    var(--accent-rule) left top / 100% calc(3 * var(--u)) no-repeat,
+    linear-gradient(160deg, #f2f6fa 0%, #dae2ed 55%, #c6d2e0 100%);
+}
+/* The budget panel's old lone amber line is replaced by the shared rule. */
+#budgetPanel::after { display: none; }
+
+/* Rain/start action stripe adopts the same amber->cyan accent. */
+#rainPanel::before {
+  background: linear-gradient(180deg, var(--accent-amber), var(--accent-cyan));
+  width: calc(5 * var(--u));
+}
+
+/* ================================================================
+   "BASALT & RELIEF-NOTICE" PANEL THEME
+   ----------------------------------------------------------------
+   A chunky, hand-crafted casual-game treatment inspired by classic
+   game UI kits, but derived from THIS game's subject instead of
+   generic fantasy wood:
+
+     - frames  = volcanic basalt (thick, dark, hard-edged)
+     - inner   = ash-parchment, like a relief notice pinned to a board
+     - accents = terracotta clay roof-tile + volcanic amber
+     - shading = flat, hard offset shadows (no soft blur) so shapes
+                 stay bold and readable on a kiosk screen
+
+   Because the panel surface flips from dark glass to light
+   parchment, every text colour on these panels is flipped to dark
+   ink here as well — otherwise the copy would be unreadable.
+   ================================================================ */
+:root {
+  --stone-900: #2c211c;   /* basalt frame */
+  --stone-700: #46342b;   /* frame inner bevel */
+  --paper-100: #fbf3e2;   /* parchment highlight */
+  --paper-200: #f2e5cb;   /* parchment body */
+  --paper-300: #e4d2b0;   /* parchment shade */
+  --ink-900:   #3b2b21;   /* body ink */
+  --ink-700:   #6b5442;   /* muted ink */
+  --clay-500:  #c8582f;   /* terracotta accent */
+  --clay-700:  #9c3f20;
+}
+
+/* ---- Menu / briefing panels ------------------------------------ */
+#overlay .screen-card {
+  background:
+    linear-gradient(180deg, var(--paper-100) 0%, var(--paper-200) 60%, var(--paper-300) 100%);
+  border: 6px solid var(--stone-900);
+  border-radius: 26px;
+  color: var(--ink-900);
+  box-shadow:
+    0 10px 0 var(--stone-700),
+    0 20px 40px rgba(0,0,0,0.55),
+    inset 0 3px 0 rgba(255,255,255,0.75),
+    inset 0 -8px 20px rgba(150,110,60,0.16);
+}
+/* Terracotta title band across the top of every panel. */
+#overlay .screen-card::before {
+  height: 14px;
+  background: linear-gradient(180deg, var(--clay-500) 0%, var(--clay-700) 100%);
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.25), inset 0 2px 0 rgba(255,255,255,0.28);
+}
+
+/* Headings: carved dark ink with a soft paper emboss. */
+#overlay .screen-card h1 {
+  color: var(--ink-900);
+  text-shadow: 0 2px 0 rgba(255,255,255,0.6);
+}
+#overlay .screen-card h1::after {
+  height: 5px; width: 96px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--clay-500), #e2a13f);
+  opacity: 1;
+}
+/* Gradient-filled titles in the markup would vanish on parchment —
+   force them back to solid ink. */
+#objectiveCard h1, #townCard h1, #infoCard h1, #endCard h1 {
+  background: none !important;
+  -webkit-text-fill-color: var(--ink-900) !important;
+  color: var(--ink-900) !important;
+}
+
+/* Body copy on parchment. */
+#overlay .screen-card p,
+#overlay .screen-card span,
+#overlay .screen-card li { color: var(--ink-900); opacity: 1; }
+#townCard > p { color: var(--ink-700); }
+
+/* The inset "notice" block: recessed paper with a clay margin rule. */
+#overlay .edu-content-box {
+  background: linear-gradient(160deg, rgba(255,255,255,0.72) 0%, rgba(226,205,166,0.42) 100%);
+  border: 2px solid rgba(120,88,60,0.35);
+  border-left: 7px solid var(--clay-500);
+  border-radius: 6px 14px 14px 6px;
+  box-shadow: inset 0 2px 6px rgba(120,88,60,0.20), inset 0 1px 0 rgba(255,255,255,0.8);
+  color: var(--ink-900);
+}
+
+/* ---- Municipality tiles ---------------------------------------- */
+#townCard .town-card {
+  background: linear-gradient(180deg, #fffaf0 0%, var(--paper-200) 100%);
+  border: 3px solid rgba(70,52,43,0.55);
+  border-radius: 16px;
+  box-shadow: 0 5px 0 rgba(70,52,43,0.35), 0 8px 16px rgba(0,0,0,0.28);
+}
+#townCard .town-card:hover:not(.selected) {
+  background: linear-gradient(180deg, #fffdf7 0%, #f7ecd8 100%);
+  border-color: var(--clay-500);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 0 rgba(70,52,43,0.35), 0 14px 22px rgba(0,0,0,0.32);
+}
+#townCard .town-card.selected {
+  background: linear-gradient(180deg, #fff6e2 0%, #f6e3bd 100%);
+  border-color: var(--clay-500);
+  box-shadow: 0 0 0 4px rgba(200,88,47,0.30), 0 6px 0 var(--clay-700), 0 12px 22px rgba(0,0,0,0.32);
+}
+#townCard .town-info h3 { color: var(--ink-900); text-shadow: 0 1px 0 rgba(255,255,255,0.6); }
+#townCard .town-info p  { color: var(--ink-700); opacity: 1; }
+#townCard .town-preview { border: 2px solid rgba(70,52,43,0.5); }
+
+/* ---- Chunky pill buttons --------------------------------------- */
+#overlay button {
+  border-radius: 999px;
+  border: 4px solid var(--stone-900);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+}
+#overlay button.btn-primary {
+  background: linear-gradient(180deg, #ffd87a 0%, #f7b32b 52%, #e08b17 100%);
+  color: #4a2a08;
+  box-shadow: 0 7px 0 var(--stone-900), 0 14px 22px rgba(0,0,0,0.38),
+              inset 0 3px 0 rgba(255,255,255,0.55);
+}
+#overlay button.btn-primary:hover {
+  box-shadow: 0 9px 0 var(--stone-900), 0 18px 26px rgba(0,0,0,0.42),
+              inset 0 3px 0 rgba(255,255,255,0.55);
+}
+#overlay button.btn-primary:active {
+  transform: translateY(5px);
+  box-shadow: 0 2px 0 var(--stone-900), 0 4px 8px rgba(0,0,0,0.35),
+              inset 0 3px 0 rgba(255,255,255,0.45);
+}
+#overlay button.btn-success {
+  background: linear-gradient(180deg, #9fd36a 0%, #62a63c 52%, #47822a 100%);
+  color: #14320a;
+  box-shadow: 0 7px 0 var(--stone-900), 0 14px 22px rgba(0,0,0,0.38),
+              inset 0 3px 0 rgba(255,255,255,0.45);
+}
+#overlay button.btn-success:active {
+  transform: translateY(5px);
+  box-shadow: 0 2px 0 var(--stone-900), 0 4px 8px rgba(0,0,0,0.35);
+}
+/* Secondary reads as a plain paper tab, not an invisible ghost button. */
+#overlay button.btn-secondary {
+  background: linear-gradient(180deg, #f6ecd8 0%, #e3d2b2 100%);
+  color: var(--ink-900);
+  border: 4px solid var(--stone-900);
+  box-shadow: 0 6px 0 rgba(70,52,43,0.75), 0 10px 18px rgba(0,0,0,0.3);
+}
+#overlay button.btn-secondary:hover {
+  background: linear-gradient(180deg, #fff7e6 0%, #ecdcbe 100%);
+  border-color: var(--stone-900);
+  transform: translateY(-2px);
+}
+#overlay button.btn-secondary:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 rgba(70,52,43,0.75);
+}
+.select-town-btn {
+  border: 3px solid var(--stone-900); border-radius: 999px;
+  background: linear-gradient(180deg, #ffd87a, #e79a1f);
+  color: #4a2a08; box-shadow: 0 4px 0 var(--stone-900);
+}
+.town-card.selected .select-town-btn {
+  background: linear-gradient(180deg, #9fd36a, #4f8f2e);
+  color: #14320a; box-shadow: 0 4px 0 var(--stone-900);
+}
+
+/* ---- In-game HUD: same basalt frame, parchment face ------------- */
+.hud-panel {
+  border: calc(4 * var(--u)) solid var(--stone-900);
+  border-radius: calc(16 * var(--u));
+}
+#budgetPanel, #goalPanel {
+  background:
+    linear-gradient(180deg, var(--clay-500) 0, var(--clay-700) calc(8 * var(--u)), transparent calc(8 * var(--u))),
+    linear-gradient(180deg, var(--paper-100) 0%, var(--paper-200) 65%, var(--paper-300) 100%);
+  color: var(--ink-900);
+  box-shadow: 0 calc(6 * var(--u)) 0 var(--stone-700), 0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.7);
+}
+#rainPanel {
+  background: linear-gradient(180deg, var(--paper-100) 0%, var(--paper-200) 65%, var(--paper-300) 100%);
+  color: var(--ink-900);
+  box-shadow: 0 calc(6 * var(--u)) 0 var(--stone-700), 0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.7);
+}
+#rainPanel::before { width: calc(8 * var(--u)); background: linear-gradient(180deg, var(--clay-500), var(--clay-700)); }
+
+/* Toolbox + tool cards in the same material. */
+#toolbox {
+  background: linear-gradient(180deg, var(--paper-100) 0%, var(--paper-200) 60%, var(--paper-300) 100%);
+  border: calc(4 * var(--u)) solid var(--stone-900); border-right: none;
+  box-shadow: calc(-8 * var(--u)) calc(8 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.42), inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.7);
+}
+#toolbox .tb-title { color: var(--ink-700); }
+#toolbox .tb-title::after { background: linear-gradient(90deg, var(--clay-500), #e2a13f); }
+.tool-item {
+  background: linear-gradient(180deg, #fffaf0 0%, #f0e2c6 100%);
+  border: calc(3 * var(--u)) solid rgba(70,52,43,0.55);
+  border-radius: calc(14 * var(--u));
+  box-shadow: 0 calc(3 * var(--u)) 0 rgba(70,52,43,0.35), inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.8);
+}
+.tool-item:hover:not(.disabled) {
+  border-color: var(--clay-500);
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(70,52,43,0.35), 0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.25);
+}
+.tool-item.armed {
+  border-color: #4f8f2e;
+  background: linear-gradient(180deg, #f4ffe9 0%, #dcf0c4 100%);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(79,143,46,0.45), 0 calc(5 * var(--u)) 0 rgba(70,52,43,0.35);
+}
+.tool-name  { color: var(--ink-900); }
+.tool-icon  { background: radial-gradient(circle at 50% 36%, #fffdf6 0%, #efe2c8 100%); }
+#instructionsBtn {
+  border: calc(3 * var(--u)) solid var(--stone-900); border-radius: calc(999 * var(--u));
+  background: linear-gradient(180deg, #f6ecd8, #e0cfae);
+  color: var(--ink-900); box-shadow: 0 calc(4 * var(--u)) 0 var(--stone-700);
+}
+
+/* In-play toast keeps the same chunky frame so it belongs to the set
+   (it floats over the scene, so it stays dark for contrast). */
+#toast {
+  border: 3px solid var(--stone-900);
+  border-radius: 18px;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.45), 0 12px 30px rgba(0,0,0,0.5);
+}
+
+/* ================================================================
+   "TORN CARDBOARD + WOOD BANNER" UI KIT
+   ----------------------------------------------------------------
+   Matches the casual-game kit style:
+     - aged tan cardboard panels, hand-cut irregular corners,
+       mottled paper grain, masking-tape strips at the corners
+     - wooden plank banner headers that overhang the panel top
+     - skewed parallelogram tab buttons, dark outline, bold
+       uppercase white text
+     - deep brown backdrop, flat cartoon shading, thick outlines
+   This section is authoritative and overrides earlier passes.
+   ================================================================ */
+:root {
+  --card-tan:    #e3d3ad;
+  --card-tan-lt: #f0e3c4;
+  --card-tan-dk: #c9b489;
+  --edge-brown:  #4a3526;
+  --wood-lt:     #a9713c;
+  --wood:        #8a5426;
+  --wood-dk:     #633a19;
+  --ink:         #4a3526;
+  --ink-soft:    #6d5540;
+  --tab-orange:  #e8862b;
+  --tab-red:     #c0392b;
+  --tab-teal:    #2a9d8f;
+  --tape:        rgba(238, 226, 190, 0.72);
+}
+
+/* Deep brown backdrop like the kit's sheet. */
+#overlay {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(120, 80, 45, 0.30) 0%, transparent 60%),
+    linear-gradient(160deg, #3a2a20 0%, #2e211a 100%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* ---- Cardboard panels ------------------------------------------ */
+#overlay .screen-card {
+  position: relative;
+  overflow: visible;                 /* tape + banner overhang the edges */
+  color: var(--ink);
+  border: 4px solid var(--edge-brown);
+  /* hand-cut, slightly irregular corners */
+  border-radius: 20px 26px 18px 24px;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(160,130,90,0.16) 0 6px, transparent 7px),
+    radial-gradient(circle at 76% 62%, rgba(160,130,90,0.14) 0 5px, transparent 6px),
+    radial-gradient(circle at 45% 88%, rgba(160,130,90,0.12) 0 7px, transparent 8px),
+    linear-gradient(170deg, var(--card-tan-lt) 0%, var(--card-tan) 55%, var(--card-tan-dk) 100%);
+  box-shadow:
+    0 10px 0 rgba(58,40,28,0.55),
+    0 20px 40px rgba(0,0,0,0.55),
+    inset 0 2px 0 rgba(255,255,255,0.5),
+    inset 0 -10px 22px rgba(150,115,70,0.22);
+  /* The banner is absolutely positioned and overhangs the top edge, so the
+     card must reserve enough padding for the part that hangs INSIDE it,
+     or the title sits on top of the first paragraph. */
+  padding-top: 68px;                 /* room for the wood banner */
+  margin-top: 38px;                  /* keeps the raised banner off the screen edge */
+}
+/* Masking-tape strips at two corners. */
+#overlay .screen-card::before,
+#overlay .screen-card::after {
+  content: '';
+  position: absolute; width: 92px; height: 26px;
+  background: var(--tape);
+  border: 1px solid rgba(120,95,60,0.30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+  opacity: 0.92;
+}
+#overlay .screen-card::before {
+  top: -14px; left: -26px; transform: rotate(-38deg);
+  background: var(--tape);
+}
+#overlay .screen-card::after {
+  bottom: -12px; right: -26px; transform: rotate(-38deg);
+}
+
+/* ---- Wooden plank banner header -------------------------------- */
+#overlay .screen-card h1 {
+  position: absolute;
+  top: -34px; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 88%;
+  margin: 0; padding: 12px 40px;
+  background: linear-gradient(180deg, var(--wood-lt) 0%, var(--wood) 55%, var(--wood-dk) 100%);
+  border: 4px solid var(--edge-brown);
+  border-radius: 12px;
+  color: #fdf3dd;
+  font-size: clamp(20px, 4vw, 32px);
+  font-weight: 900; letter-spacing: 0.6px;
+  text-shadow: 0 3px 0 rgba(58,40,28,0.85), 0 0 1px rgba(58,40,28,0.9);
+  box-shadow:
+    0 6px 0 rgba(58,40,28,0.6),
+    0 12px 22px rgba(0,0,0,0.45),
+    inset 0 3px 0 rgba(255,255,255,0.22),
+    inset 0 -6px 12px rgba(0,0,0,0.25);
+  /* notched ribbon ends */
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  white-space: nowrap;
+}
+#overlay .screen-card h1::after { display: none; }   /* banner replaces the underline */
+/* Gradient-filled titles in the markup must not knock out the banner text. */
+#objectiveCard h1, #townCard h1, #infoCard h1, #endCard h1 {
+  background: linear-gradient(180deg, var(--wood-lt) 0%, var(--wood) 55%, var(--wood-dk) 100%) !important;
+  -webkit-text-fill-color: #fdf3dd !important;
+  color: #fdf3dd !important;
+}
+
+/* ---- Body copy on cardboard ------------------------------------ */
+#overlay .screen-card p,
+#overlay .screen-card span,
+#overlay .screen-card li { color: var(--ink); opacity: 1; }
+#townCard > p { color: var(--ink-soft); }
+
+/* Inset note = a lighter pasted slip of paper. */
+#overlay .edu-content-box {
+  background: linear-gradient(170deg, rgba(255,252,240,0.85) 0%, rgba(232,216,180,0.6) 100%);
+  border: 2px solid rgba(90,66,44,0.38);
+  border-left: 8px solid var(--tab-orange);
+  border-radius: 4px 12px 10px 6px;
+  color: var(--ink);
+  box-shadow: inset 0 2px 6px rgba(120,90,55,0.20), 0 2px 0 rgba(90,66,44,0.18);
+}
+
+/* ---- Skewed tab buttons ---------------------------------------- */
+#overlay button {
+  position: relative;
+  border: none; border-radius: 4px;
+  font-weight: 900; letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #fff8ea;
+  text-shadow: 0 2px 0 rgba(58,40,28,0.85);
+  /* parallelogram tab, like the kit */
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+  transform: rotate(-0.6deg);
+  transition: transform .12s ease, filter .15s;
+  box-shadow: none;
+}
+#overlay button::after { display: none; }   /* drop the old shimmer sweep */
+#overlay button:hover  { transform: rotate(-0.6deg) translateY(-2px); filter: brightness(1.07); }
+#overlay button:active { transform: rotate(-0.6deg) translateY(3px); }
+
+#overlay button.btn-primary {
+  background: linear-gradient(180deg, #f0a03f 0%, var(--tab-orange) 50%, #b9631b 100%);
+  color: #fff8ea;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.30), inset 0 -7px 0 rgba(0,0,0,0.22),
+              inset 0 0 0 3px var(--edge-brown);
+}
+#overlay button.btn-success {
+  background: linear-gradient(180deg, #45bfae 0%, var(--tab-teal) 50%, #1d7568 100%);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.28), inset 0 -7px 0 rgba(0,0,0,0.22),
+              inset 0 0 0 3px var(--edge-brown);
+}
+#overlay button.btn-secondary {
+  background: linear-gradient(180deg, #d05b4c 0%, var(--tab-red) 50%, #8e2a1e 100%);
+  color: #fff8ea; border: none;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.26), inset 0 -7px 0 rgba(0,0,0,0.22),
+              inset 0 0 0 3px var(--edge-brown);
+}
+#overlay button.btn-secondary:hover { background: linear-gradient(180deg, #dc6857 0%, #c9412f 50%, #96301f 100%); }
+
+/* ---- Municipality tiles = pasted card slips --------------------- */
+#townCard .town-card {
+  background: linear-gradient(170deg, #fbf1d8 0%, var(--card-tan) 100%);
+  border: 3px solid var(--edge-brown);
+  border-radius: 12px 16px 10px 14px;
+  box-shadow: 0 5px 0 rgba(58,40,28,0.45), 0 8px 16px rgba(0,0,0,0.3);
+}
+#townCard .town-card:hover:not(.selected) { transform: translateY(-3px) rotate(-0.4deg); }
+#townCard .town-card.selected {
+  background: linear-gradient(170deg, #fff6dd 0%, #efdcaf 100%);
+  box-shadow: 0 0 0 4px var(--tab-orange), 0 5px 0 rgba(58,40,28,0.45), 0 10px 18px rgba(0,0,0,0.32);
+}
+#townCard .town-info h3 { color: var(--ink); text-shadow: 0 1px 0 rgba(255,255,255,0.55); }
+#townCard .town-info p  { color: var(--ink-soft); opacity: 1; }
+#townCard .town-preview { border: 3px solid var(--edge-brown); border-radius: 8px; }
+.select-town-btn {
+  border: none; border-radius: 3px;
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  background: linear-gradient(180deg, #f0a03f, #c06a1c);
+  color: #fff8ea; text-transform: uppercase; font-weight: 900;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.3), inset 0 0 0 3px var(--edge-brown);
+}
+.town-card.selected .select-town-btn {
+  background: linear-gradient(180deg, #45bfae, #1d7568);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.3), inset 0 0 0 3px var(--edge-brown);
+}
+
+/* ---- In-game HUD in the same cardboard material ----------------- */
+.hud-panel { border: calc(4 * var(--u)) solid var(--edge-brown); border-radius: calc(14 * var(--u)) calc(16 * var(--u)) calc(12 * var(--u)) calc(15 * var(--u)); }
+#budgetPanel, #goalPanel, #rainPanel {
+  background: linear-gradient(170deg, var(--card-tan-lt) 0%, var(--card-tan) 60%, var(--card-tan-dk) 100%);
+  color: var(--ink);
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(58,40,28,0.5), 0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.5);
+}
+#budgetPanel::after { display: none; }
+#rainPanel::before { width: calc(9 * var(--u)); background: linear-gradient(180deg, var(--tab-orange), #b9631b); }
+
+#toolbox {
+  background: linear-gradient(170deg, var(--card-tan-lt) 0%, var(--card-tan) 60%, var(--card-tan-dk) 100%);
+  border: calc(4 * var(--u)) solid var(--edge-brown); border-right: none;
+  box-shadow: calc(-8 * var(--u)) calc(8 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.42), inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.5);
+}
+#toolbox .tb-title {
+  color: #fdf3dd; text-transform: uppercase; font-weight: 900;
+  background: linear-gradient(180deg, var(--wood-lt), var(--wood-dk));
+  border: calc(3 * var(--u)) solid var(--edge-brown); border-radius: calc(8 * var(--u));
+  padding: calc(3 * var(--u)) calc(8 * var(--u)); margin: 0 calc(4 * var(--u)) calc(6 * var(--u));
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(58,40,28,0.8);
+}
+#toolbox .tb-title::after { display: none; }
+.tool-item {
+  background: linear-gradient(170deg, #fbf1d8 0%, #e6d5ac 100%);
+  border: calc(3 * var(--u)) solid var(--edge-brown);
+  border-radius: calc(11 * var(--u)) calc(13 * var(--u)) calc(10 * var(--u)) calc(12 * var(--u));
+  box-shadow: 0 calc(3 * var(--u)) 0 rgba(58,40,28,0.4), inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.6);
+}
+.tool-item:hover:not(.disabled) { transform: translateY(calc(-3 * var(--u))) rotate(-0.5deg); }
+.tool-item.armed {
+  background: linear-gradient(170deg, #d9f2e6 0%, #a9dcc8 100%);
+  box-shadow: 0 0 0 calc(3 * var(--u)) var(--tab-teal), 0 calc(3 * var(--u)) 0 rgba(58,40,28,0.4);
+}
+.tool-name { color: var(--ink); font-weight: 800; }
+.tool-icon { background: radial-gradient(circle at 50% 36%, #fffbef 0%, #ecdcb6 100%); }
+/* MENU is a low-frequency action, so it is deliberately the quietest
+   control on the HUD. It used to be the most saturated element on screen —
+   louder than START, the one thing the player actually has to press. Warm
+   amber is now reserved for that primary action. */
+#instructionsBtn {
+  border: none; border-radius: calc(3 * var(--u));
+  clip-path: polygon(calc(8 * var(--u)) 0, 100% 0, calc(100% - calc(8 * var(--u))) 100%, 0 100%);
+  background: linear-gradient(180deg, #7b8ba1, #4d5d75);
+  color: #eef3f8; text-transform: uppercase; font-weight: 800; opacity: .9;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(20,28,40,0.7);
+  box-shadow: inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.18), inset 0 0 0 calc(3 * var(--u)) #38455a;
+}
+#instructionsBtn:hover { opacity: 1; }
+#toast {
+  background: linear-gradient(170deg, var(--card-tan-lt), var(--card-tan-dk));
+  color: var(--ink);
+  border: 4px solid var(--edge-brown);
+  border-radius: 14px 16px 12px 15px;
+  box-shadow: 0 6px 0 rgba(58,40,28,0.5), 0 12px 26px rgba(0,0,0,0.5);
+}
+
+/* ================================================================
+   "PROTECT THE VILLAGE" — LOSS ALERT
+   ----------------------------------------------------------------
+   A destroyed structure used to be just one more small dot going red
+   in a scrolling row, which is very easy to miss mid-storm. Now the
+   whole panel reacts: it flashes red and shakes, the dot that just
+   died bursts, a "-1" floats up off the panel, and the standing
+   counter takes a hit. The row also auto-scrolls to the new loss.
+   ================================================================ */
+#goalPanel { transition: box-shadow .2s ease; }
+
+/* Panel-level alarm: red rim + glow + a short shake. */
+#goalPanel.alarm {
+  animation: goalAlarm 1.25s cubic-bezier(.36,.07,.19,.97) both;
+  border-color: #b0301f !important;
+  z-index: 45;
+}
+@keyframes goalAlarm {
+  0%   { transform: translateX(0);   box-shadow: 0 0 0 0 rgba(200,48,31,0.85), 0 6px 0 rgba(58,40,28,0.5); }
+  8%   { transform: translateX(-6px) rotate(-0.6deg); }
+  18%  { transform: translateX(6px)  rotate(0.6deg); }
+  28%  { transform: translateX(-4px) rotate(-0.4deg); }
+  38%  { transform: translateX(4px)  rotate(0.4deg); }
+  48%  { transform: translateX(0); box-shadow: 0 0 0 14px rgba(200,48,31,0), 0 6px 0 rgba(58,40,28,0.5); }
+  100% { transform: translateX(0); box-shadow: 0 0 0 0 rgba(200,48,31,0), 0 6px 0 rgba(58,40,28,0.5); }
+}
+/* Red wash across the panel face during the alarm. */
+#goalPanel.alarm::before {
+  animation: goalAlarmWash 1.25s ease-out both;
+}
+@keyframes goalAlarmWash {
+  0%   { background: rgba(200,48,31,0.55); }
+  60%  { background: rgba(200,48,31,0.18); }
+  100% { background: transparent; }
+}
+
+/* The dot that just died: bursts out, then settles. */
+.just-lost {
+  animation: dotBurst 0.75s cubic-bezier(.2,1.4,.4,1) both;
+  z-index: 2;
+}
+@keyframes dotBurst {
+  0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(239,68,68,0.9); }
+  35%  { transform: scale(2.1); box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1.1); box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+/* The landmark diamonds are rotated 45deg, so their burst must keep it. */
+.landmark-dot.just-lost { animation-name: dotBurstDiamond; }
+@keyframes dotBurstDiamond {
+  0%   { transform: rotate(45deg) scale(1);   box-shadow: 0 0 0 0 rgba(239,68,68,0.9); }
+  35%  { transform: rotate(45deg) scale(2.1); box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+  70%  { transform: rotate(45deg) scale(0.9); }
+  100% { transform: rotate(45deg) scale(1.1); box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
+
+/* "-1" damage number floating up off the panel. */
+.loss-pop {
+  position: absolute; top: 4px; right: 12px;
+  font-size: 30px; font-weight: 900; line-height: 1;
+  color: #e33b26;
+  text-shadow: 0 2px 0 #fff, 0 3px 6px rgba(0,0,0,0.45);
+  pointer-events: none; z-index: 3;
+  animation: lossPopRise 1.35s cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes lossPopRise {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.6); }
+  18%  { opacity: 1; transform: translateY(-4px) scale(1.35); }
+  35%  { transform: translateY(-8px) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1); }
+}
+
+/* The standing counter reacts to the hit. */
+.goal-counter { transition: color .2s, transform .15s; }
+.goal-counter.counter-hit {
+  animation: counterHit 0.65s ease both;
+  color: #b0301f !important; opacity: 1 !important;
+}
+@keyframes counterHit {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.3); }
+  55%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #goalPanel.alarm, .just-lost, .loss-pop, .goal-counter.counter-hit { animation: none !important; }
+  #goalPanel.alarm { box-shadow: 0 0 0 calc(4 * var(--u)) rgba(200,48,31,0.8) !important; }
+}
+
+/* ================================================================
+   KIOSK / TOUCH MODE
+   ----------------------------------------------------------------
+   This build is for a hands-on museum kiosk: fingers only, no mouse,
+   no hover, no keyboard. Three problems are fixed here.
+
+   1. STUCK HOVER. On touch screens a tap leaves :hover applied until
+      you tap elsewhere, so hover-lift effects freeze in place and a
+      card can look permanently "selected". All hover feedback is
+      therefore confined to devices that actually have a pointer.
+   2. NO HOVER FEEDBACK. With hover gone, touch needs its own
+      confirmation, so every control gets a firm pressed state.
+   3. BROWSER GESTURES. Double-tap zoom, long-press callouts, text
+      selection, drag-to-scroll bounce and right-click menus all
+      misfire on a kiosk and are disabled.
+   ================================================================ */
+
+/* ---- 1. Hover effects only where a real pointer exists ---------- */
+@media (hover: none), (pointer: coarse) {
+  #rainPanel:not(.active):hover,
+  #instructionsBtn:hover,
+  #toolboxToggle:hover,
+  .tool-item:hover:not(.disabled),
+  #townCard .town-card:hover:not(.selected),
+  .town-card:hover:not(.selected),
+  #overlay button:hover,
+  .select-town-btn:hover {
+    transform: none;
+    filter: none;
+  }
+  /* Preserve each element's own resting transform where it has one. */
+  #toolboxToggle:hover { transform: translateY(-50%); }
+  #overlay button:hover { transform: rotate(-0.6deg); }
+  #overlay button.btn-primary:hover::after,
+  #overlay button.btn-success:hover::after { left: -60%; }
+  #overlay button.btn-primary:hover .btn-arrow,
+  #overlay button.btn-success:hover .btn-arrow,
+  #overlay button.btn-secondary:hover .btn-arrow { transform: none; }
+
+  /* No mouse on the kiosk, so never show a cursor. */
+  html, body, * { cursor: none !important; }
+}
+
+/* ---- 2. Firm press feedback for fingers ------------------------- */
+#overlay button:active,
+.select-town-btn:active {
+  filter: brightness(0.94) !important;
+}
+.tool-item:active:not(.disabled) {
+  transform: scale(0.94) !important;
+  filter: brightness(0.96);
+}
+#townCard .town-card:active:not(.selected),
+.town-card:active:not(.selected) {
+  transform: scale(0.98) !important;
+  filter: brightness(0.97);
+}
+#rainPanel:not(.active):active {
+  transform: scale(0.97) !important;
+  filter: brightness(0.95);
+}
+#instructionsBtn:active,
+#toolboxToggle:active,
+.home-btn:active {
+  filter: brightness(0.92) !important;
+}
+/* Tapping a disabled tool should still acknowledge the touch. */
+.tool-item.disabled:active { animation: kioskNope 0.3s ease; }
+@keyframes kioskNope {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-4px); }
+  75%      { transform: translateX(4px); }
+}
+
+/* ---- 3. Kill unwanted browser touch behaviour ------------------- */
+html, body {
+  overscroll-behavior: none;          /* no pull-to-refresh / rubber-band */
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;         /* removes the 300ms double-tap zoom */
+}
+* {
+  -webkit-tap-highlight-color: transparent;   /* no grey flash box */
+  -webkit-touch-callout: none;                /* no long-press menu */
+}
+/* Nothing on a kiosk should be selectable or draggable by a stray finger,
+   but keep the scrolling dot row and tool list scrollable. */
+body, #overlay, .screen-card, .hud-panel, #toolbox, button, .tool-item, .town-card {
+  user-select: none; -webkit-user-select: none;
+}
+/* -webkit-user-drag has no standard unprefixed equivalent, so only the
+   prefixed form is used here. */
+img, svg { -webkit-user-drag: none; pointer-events: none; }
+/* The scrollable strips still need momentum scrolling on touch. */
+#houseDots, #toolItemsContainer { -webkit-overflow-scrolling: touch; }
+
+/* ---- 4. Finger-sized touch targets ------------------------------ */
+/* Apple/Google guidance is a 44px minimum; a public kiosk used by
+   children and older visitors wants more, so controls are floored well
+   above that. */
+#overlay button { min-height: 56px; padding-left: 34px; padding-right: 34px; }
+.select-town-btn { min-height: 52px; }
+/* These are ACCESSIBILITY FLOORS, so they stay in real pixels rather than
+   scaling with --hud-scale. Shrinking the HUD should make it take up less
+   of the screen, not make the controls too small for a child or an older
+   visitor to hit reliably. A control is therefore never smaller than its
+   floor, however far --hud-scale is turned down. */
+.tool-item { min-height: 60px; }
+#toolboxToggle { min-width: 44px !important; min-height: 76px !important; }
+#toolboxToggle svg { width: calc(30 * var(--u)); height: calc(30 * var(--u)); min-width: 22px; min-height: 22px; }
+#instructionsBtn { min-height: 44px; min-width: 96px; }
+#rainPanel { min-height: 60px; }
+.town-card { min-height: 104px; }
+
+/* ================================================================
+   MUNICIPALITY CARD — LANDMARK BACKGROUND ON SELECT
+   ----------------------------------------------------------------
+   The small square thumbnail is replaced by the landmark artwork
+   used as the card's own background. It is hidden by default and
+   fades in only on the SELECTED card, so exactly one card ever
+   shows its landmark: picking another municipality fades the old
+   one out and the new one in.
+
+   The art is held at low opacity behind a parchment scrim and is
+   anchored to the right, so the card's title and description stay
+   fully legible on top of it.
+   ================================================================ */
+
+/* The old inline thumbnail box is no longer used. */
+#townCard .town-preview { display: none !important; }
+
+#townCard .town-card {
+  position: relative;
+  overflow: hidden;                 /* keeps the art inside the rounded card */
+  isolation: isolate;
+}
+
+/* Layer 1 — the landmark artwork itself (hidden until selected). */
+#townCard .town-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-repeat: no-repeat;
+  background-position: right -10px center;
+  background-size: auto 132%;
+  opacity: 0;
+  transform: scale(1.06);
+  transition: opacity .45s ease, transform .45s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Layer 2 — parchment scrim so the text never fights the artwork. */
+#townCard .town-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    rgba(251,241,216,0.94) 0%,
+    rgba(251,241,216,0.80) 42%,
+    rgba(251,241,216,0.42) 72%,
+    rgba(251,241,216,0.22) 100%);
+  opacity: 0;
+  transition: opacity .45s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Card content always sits above both layers. */
+#townCard .town-card > * { position: relative; z-index: 2; }
+
+/* Reveal on selection only — deselecting fades it straight back out. */
+#townCard .town-card.selected::before {
+  opacity: 0.42;
+  transform: scale(1);
+}
+#townCard .town-card.selected::after { opacity: 1; }
+
+/* Per-municipality artwork. */
+#townCard .town-card[data-town="bacolor"]::before {
+  background-image: url('assets/bacolor/bacolor_church.png');
+}
+#townCard .town-card[data-town="porac"]::before {
+  background-image: url('assets/porac/babo_robot.png');
+}
+#townCard .town-card[data-town="angeles"]::before {
+  background-image: url('assets/angeles/angeles_church.png');
+}
+
+/* With the thumbnail gone the text block should use the full width. */
+#townCard .town-info { flex: 1 1 auto; width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  #townCard .town-card::before,
+  #townCard .town-card::after { transition: none; }
+}
+
+/* ================================================================
+   MUNICIPALITY CARD — STRONGER ARTWORK + PER-TOWN COLOUR
+   ----------------------------------------------------------------
+   Turns the selected card into a clearly themed panel:
+     - the landmark artwork is much more prominent
+     - each municipality gets its own colour wash, carried over from
+       the palette the old thumbnails used
+         Bacolor -> warm amber   (church / lahar plain)
+         Porac   -> green        (farm fields near the peak)
+         Angeles -> blue         (the Abacan river district)
+   The scrim is kept only behind the text column so the art can read
+   strongly on the right while the copy stays crisp on the left.
+   ================================================================ */
+
+/* Artwork: bigger, bolder, and fully opaque-ish when selected. */
+#townCard .town-card::before {
+  background-position: right -6px center;
+  background-size: auto 150%;
+}
+#townCard .town-card.selected::before { opacity: 0.85; }
+
+/* Scrim now only guards the text column, so the art stays visible. */
+#townCard .town-card::after {
+  background: linear-gradient(90deg,
+    rgba(255,250,240,0.96) 0%,
+    rgba(255,250,240,0.90) 46%,
+    rgba(255,250,240,0.55) 66%,
+    rgba(255,250,240,0.10) 84%,
+    rgba(255,250,240,0) 100%);
+}
+
+/* ---- Per-municipality colour, shown when that card is selected ---- */
+#townCard .town-card[data-town="bacolor"].selected {
+  background: linear-gradient(100deg, #fff4dc 0%, #f7e0b4 55%, #eecb8c 100%);
+  border-color: #c8791f;
+  box-shadow: 0 0 0 4px rgba(200,121,31,0.45), 0 6px 0 rgba(58,40,28,0.45),
+              0 12px 22px rgba(0,0,0,0.34);
+}
+#townCard .town-card[data-town="porac"].selected {
+  background: linear-gradient(100deg, #f2fbe9 0%, #d8efc6 55%, #b7dfa4 100%);
+  border-color: #4f8f2e;
+  box-shadow: 0 0 0 4px rgba(79,143,46,0.45), 0 6px 0 rgba(58,40,28,0.45),
+              0 12px 22px rgba(0,0,0,0.34);
+}
+#townCard .town-card[data-town="angeles"].selected {
+  background: linear-gradient(100deg, #eef4ff 0%, #d3e2fa 55%, #b3c9f0 100%);
+  border-color: #2f5fb0;
+  box-shadow: 0 0 0 4px rgba(47,95,176,0.45), 0 6px 0 rgba(58,40,28,0.45),
+              0 12px 22px rgba(0,0,0,0.34);
+}
+
+/* Tint the scrim to match, so the colour reads across the whole card. */
+#townCard .town-card[data-town="bacolor"].selected::after {
+  background: linear-gradient(100deg,
+    rgba(255,246,226,0.96) 0%, rgba(253,238,206,0.88) 46%,
+    rgba(250,228,182,0.52) 66%, rgba(247,220,164,0.10) 84%, rgba(247,220,164,0) 100%);
+}
+#townCard .town-card[data-town="porac"].selected::after {
+  background: linear-gradient(100deg,
+    rgba(244,252,236,0.96) 0%, rgba(228,245,214,0.88) 46%,
+    rgba(210,238,193,0.52) 66%, rgba(198,232,178,0.10) 84%, rgba(198,232,178,0) 100%);
+}
+#townCard .town-card[data-town="angeles"].selected::after {
+  background: linear-gradient(100deg,
+    rgba(240,246,255,0.96) 0%, rgba(223,234,252,0.88) 46%,
+    rgba(205,222,249,0.52) 66%, rgba(190,211,245,0.10) 84%, rgba(190,211,245,0) 100%);
+}
+
+/* Selected town name picks up its municipality colour. */
+#townCard .town-card[data-town="bacolor"].selected .town-info h3 { color: #8a4a06; }
+#townCard .town-card[data-town="porac"].selected   .town-info h3 { color: #2f6415; }
+#townCard .town-card[data-town="angeles"].selected .town-info h3 { color: #234a8c; }
+
+/* Give the text column a little room from the artwork. */
+#townCard .town-card.selected .town-info { padding-right: 10px; }
+
+/* Town Profile: the municipality's history blurb reads as a centred
+   intro paragraph, while the tool guide beneath it stays left-aligned
+   (centring an icon-and-text list would ragged the icons out of line). */
+#infoCard #infoCardText {
+  text-align: center;
+  margin: 0 auto 4px;
+}
+
+/* ================================================================
+   TOWN PROFILE — LARGER TEXT + SCROLLABLE CONTENT
+   ----------------------------------------------------------------
+   The profile carries the most copy of any screen (history blurb +
+   the full tool guide), so at kiosk text sizes it can run taller
+   than the frame. Nothing on this screen scrolled before, which
+   meant overflow was simply unreachable — so the inner content box
+   now scrolls while the card frame, wooden banner and tape stay put
+   (scrolling the card itself would clip those, as they overhang).
+   ================================================================ */
+#infoCard .edu-content-box {
+  font-size: 26px;                 /* tool guide */
+  line-height: 1.55;
+  max-height: 56vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;    /* don't scroll the page behind it */
+}
+#infoCard #infoCardText {
+  font-size: 31px;                 /* the town's history blurb, the lead copy */
+  line-height: 1.45;
+  margin-bottom: 6px;
+}
+
+/* Chunky, finger-friendly scrollbar to match the kit. */
+#infoCard .edu-content-box::-webkit-scrollbar { width: 12px; }
+#infoCard .edu-content-box::-webkit-scrollbar-track {
+  background: rgba(120,88,60,0.14); border-radius: 8px;
+}
+#infoCard .edu-content-box::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #b9793a, #8a5426);
+  border: 2px solid var(--edge-brown, #4a3526);
+  border-radius: 8px;
+}
+
+/* ================================================================
+   TOWN PROFILE — RECLAIM SIDE SPACE, LARGER TOOL COPY
+   ----------------------------------------------------------------
+   Three nested paddings were stacking up on this screen (card 28px
+   + content box 16px, on each side), which squeezed the copy into a
+   narrow column and left obvious blank margins. They're tightened
+   here so the text runs nearly the full width of the panel, and the
+   tool descriptions are enlarged to match the rest of the screen.
+   ================================================================ */
+#infoCard {
+  width: 99%;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+#infoCard .edu-content-box {
+  padding: 16px 14px;
+  margin-left: 0;
+  margin-right: 0;
+  font-size: 30px;              /* tool descriptions */
+  line-height: 1.5;
+}
+#infoCard #infoCardText {
+  font-size: 33px;
+  line-height: 1.4;
+}
+/* Tool rows: bigger icons to stay in proportion with the larger copy,
+   and the text block allowed to fill the reclaimed width. */
+#infoCard .edu-content-box > div { margin-bottom: 14px !important; }
+#infoCard .edu-content-box svg {
+  width: 34px !important;
+  height: 34px !important;
+  margin-right: 12px !important;
+}
+#infoCard .edu-content-box span { flex: 1; min-width: 0; }
+
+/* ================================================================
+   TOWN PROFILE — FULL-WIDTH DESCRIPTION
+   ----------------------------------------------------------------
+   Two things were still narrowing this copy:
+     1. the global "#overlay p { max-width: 460px }" cap, which was
+        never lifted for the profile blurb, and
+     2. the card + content-box side paddings stacking up.
+   Both are removed here so the description spans the whole panel.
+   ================================================================ */
+#infoCard {
+  width: 100%;
+  max-width: none;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+#infoCard .edu-content-box {
+  padding-left: 10px;
+  padding-right: 10px;
+  border-left-width: 5px;
+}
+#infoCard #infoCardText,
+#infoCard .edu-content-box p,
+#infoCard .edu-content-box span {
+  max-width: none;          /* lift the 460px overlay cap */
+  width: auto;
+}
+#infoCard #infoCardText {
+  display: block;
+  width: 100%;
+  padding: 0 2px;
+  text-wrap: pretty;        /* avoids a stray short last line */
+}
+
+/* ================================================================
+   TYPOGRAPHY — DISPLAY / BODY PAIRING
+   ----------------------------------------------------------------
+   Two faces instead of one, so headings and copy have distinct jobs:
+
+     Luckiest Guy  — chunky cartoon caps for wooden banners, titles
+                     and buttons. Reads as the game-kit lettering,
+                     but it's display-only (no lowercase nuance, no
+                     weights), so it never touches long paragraphs.
+     Nunito        — rounded and open, with true weights and italics.
+                     Used for every description, which is what a
+                     visitor actually reads from a metre away.
+
+   Baloo 2 stays as the fallback the rest of the UI was built on.
+   ================================================================ */
+:root {
+  --font-display: 'Luckiest Guy', 'Baloo 2', 'Trebuchet MS', sans-serif;
+  --font-body: 'Nunito', 'Baloo 2', 'Trebuchet MS', sans-serif;
+}
+
+/* ---- Body copy: everything a visitor reads ---------------------- */
+#overlay .screen-card p,
+#overlay .screen-card span,
+#overlay .screen-card li,
+#infoCard #infoCardText,
+#infoCard .edu-content-box,
+#objectiveCard .edu-content-box,
+#townCard > p,
+#townCard .town-info p,
+.welcome-desc,
+#toast,
+.hud-panel, #budgetPanel, #goalPanel, #rainPanel,
+.goal-counter, .tool-price {
+  font-family: var(--font-body);
+}
+/* Nunito runs a touch lighter than Baloo, so nudge the weight up to keep
+   the copy solid at kiosk viewing distance. */
+#infoCard .edu-content-box,
+#infoCard #infoCardText,
+#objectiveCard .edu-content-box,
+#townCard > p,
+#townCard .town-info p { font-weight: 600; letter-spacing: 0.1px; }
+#infoCard .edu-content-box b,
+#objectiveCard .edu-content-box b,
+#overlay .screen-card strong { font-weight: 900; }
+
+/* ---- Display: banners, titles, town names, buttons -------------- */
+#overlay .screen-card h1,
+#objectiveCard h1, #townCard h1, #infoCard h1, #endCard h1,
+#townCard .town-info h3,
+#overlay button,
+.select-town-btn,
+#toolbox .tb-title,
+#instructionsBtn,
+.tool-name {
+  font-family: var(--font-display);
+  font-weight: 400;              /* Luckiest Guy ships a single weight */
+  letter-spacing: calc(0.8 * var(--u));
+}
+/* The display face has tall caps, so give it a little more line room. */
+#overlay .screen-card h1 { line-height: 1.15; }
+#townCard .town-info h3 { line-height: 1.2; letter-spacing: 0.5px; }
+
+/* The game frame must never scroll. Anything that nudges it sideways drags
+   the collapsed toolbox (parked just off the right edge) into view, which
+   reads as the tool panel popping open by itself. */
+#gameWrap { overflow: hidden; overscroll-behavior: none; }
+
+/* ================================================================
+   VOLUME CONTROL
+   A speaker button beside the Menu button that expands a slider.
+   Sized for fingers, and styled to match the cardboard/wood kit.
+   ================================================================ */
+/* Docked bottom-right, clear of the toolbox handle (which is centred on the
+   right edge, well above this) and of the structures at the foot of the map. */
+#volumeControl {
+  position: absolute; right: calc(14 * var(--u)); bottom: calc(16 * var(--u));
+  z-index: 40; display: flex; align-items: center; gap: calc(8 * var(--u));
+}
+#volumeBtn {
+  width: calc(56 * var(--u)); height: calc(56 * var(--u)); min-height: calc(56 * var(--u));
+  border: calc(3 * var(--u)) solid var(--edge-brown, #4a3526);
+  border-radius: calc(999 * var(--u));
+  background: linear-gradient(180deg, #f0a03f, #c06a1c);
+  box-shadow: 0 calc(4 * var(--u)) 0 rgba(58,40,28,0.6), 0 calc(8 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.4);
+  font-size: calc(26 * var(--u)); line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+#volumeBtn:active { filter: brightness(0.92); transform: translateY(calc(2 * var(--u))); }
+
+#volumePopover {
+  display: flex; align-items: center; gap: calc(10 * var(--u));
+  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  border: calc(3 * var(--u)) solid var(--edge-brown, #4a3526);
+  border-radius: calc(14 * var(--u)) calc(16 * var(--u)) calc(12 * var(--u)) calc(15 * var(--u));
+  background: linear-gradient(170deg, var(--card-tan-lt, #f0e3c4), var(--card-tan-dk, #c9b489));
+  box-shadow: 0 calc(5 * var(--u)) 0 rgba(58,40,28,0.5), 0 calc(10 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.4);
+  /* Docked on the RIGHT edge, so the slider opens to the LEFT of the button;
+     opening right would run it off the screen. */
+  order: -1;
+}
+#volumePopover.hidden { display: none; }
+
+#muteBtn {
+  width: calc(44 * var(--u)); height: calc(44 * var(--u)); min-height: calc(44 * var(--u)); padding: 0;
+  border: calc(2 * var(--u)) solid var(--edge-brown, #4a3526);
+  border-radius: calc(10 * var(--u));
+  background: linear-gradient(180deg, #fbf1d8, #e6d5ac);
+  font-size: calc(20 * var(--u)); line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#muteBtn:active { filter: brightness(0.92); }
+
+/* Chunky, finger-draggable slider. */
+#volumeSlider {
+  -webkit-appearance: none; appearance: none;
+  width: calc(150 * var(--u)); height: calc(16 * var(--u)); border-radius: calc(999 * var(--u));
+  background: linear-gradient(180deg, #b9a988, #d9cbab);
+  border: calc(2 * var(--u)) solid var(--edge-brown, #4a3526);
+  outline: none; cursor: pointer;
+}
+#volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: calc(30 * var(--u)); height: calc(30 * var(--u)); border-radius: 50%;
+  background: linear-gradient(180deg, #f5b455, #c06a1c);
+  border: calc(3 * var(--u)) solid var(--edge-brown, #4a3526);
+  box-shadow: 0 calc(2 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,0.35);
+  cursor: pointer;
+}
+#volumeSlider::-moz-range-thumb {
+  width: calc(30 * var(--u)); height: calc(30 * var(--u)); border-radius: 50%;
+  background: linear-gradient(180deg, #f5b455, #c06a1c);
+  border: calc(3 * var(--u)) solid var(--edge-brown, #4a3526);
+  cursor: pointer;
+}
+#volumeValue {
+  font-weight: 800; font-size: calc(17 * var(--u)); min-width: calc(46 * var(--u));
+  color: var(--ink, #4a3526); text-align: right;
+}
+
+/* ================================================================
+   LEADERBOARD + NAME ENTRY
+   Reuses the game's cardboard/wood kit: tan panels, brown outlines,
+   flat drop edges. Sized for a portrait touchscreen — big targets,
+   no hover required, touch-momentum scrolling on the list.
+   ================================================================ */
+
+/* ---- Name entry ---- */
+#playerNameInput {
+  display: block; width: 88%; margin: 18px auto 6px;
+  padding: 18px 20px;
+  font-family: var(--font-body); font-size: 30px; font-weight: 800;
+  text-align: center; color: var(--ink, #4a3526);
+  background: linear-gradient(180deg, #fffdf6, #f0e2c6);
+  border: 4px solid var(--edge-brown, #4a3526);
+  border-radius: 14px 16px 12px 15px;
+  box-shadow: inset 0 3px 8px rgba(120,90,55,0.22);
+  outline: none;
+}
+#playerNameInput:focus {
+  border-color: var(--tab-orange, #e8862b);
+  box-shadow: inset 0 3px 8px rgba(120,90,55,0.22), 0 0 0 4px rgba(232,134,43,0.35);
+}
+#playerNameInput::placeholder { color: rgba(109,84,64,0.55); font-weight: 600; }
+#nameHint {
+  text-align: center; font-size: 19px; font-weight: 700;
+  color: var(--ink-soft, #6d5540); margin-bottom: 6px;
+}
+#nameHint.warn { color: #b0301f; }
+#overlay button.disabled, #overlay button:disabled {
+  filter: grayscale(55%) brightness(0.92); opacity: 0.6; cursor: not-allowed;
+}
+
+/* ---- Town filter chips ---- */
+#lbFilters {
+  display: flex; gap: 8px; justify-content: center;
+  flex-wrap: wrap; margin: 4px 0 14px;
+}
+.lb-filter {
+  min-height: 52px; padding: 10px 18px;
+  font-family: var(--font-display); font-size: 20px;
+  color: var(--ink, #4a3526);
+  background: linear-gradient(180deg, #fbf1d8, #e6d5ac);
+  border: 3px solid var(--edge-brown, #4a3526);
+  border-radius: 10px; cursor: pointer;
+  box-shadow: 0 3px 0 rgba(58,40,28,0.4);
+}
+.lb-filter.active {
+  background: linear-gradient(180deg, #f0a03f, #c06a1c);
+  color: #fff8ea; text-shadow: 0 2px 0 rgba(58,40,28,0.8);
+}
+.lb-filter:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(58,40,28,0.4); }
+
+/* ---- The Top 10 list ---- */
+#lbList {
+  max-height: 46vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 62px 1fr auto;
+  grid-template-areas: "rank name score" "rank meta score";
+  align-items: center; gap: 2px 12px;
+  padding: 12px 14px; margin-bottom: 9px;
+  background: linear-gradient(170deg, #fbf1d8 0%, #e9dab4 100%);
+  border: 3px solid rgba(74,53,38,0.55);
+  border-radius: 12px 14px 10px 13px;
+  box-shadow: 0 3px 0 rgba(58,40,28,0.32);
+}
+.lb-rank {
+  grid-area: rank; text-align: center;
+  font-family: var(--font-display); font-size: 30px;
+  color: var(--ink, #4a3526);
+}
+.lb-name {
+  grid-area: name; font-family: var(--font-display);
+  font-size: 26px; color: var(--ink, #4a3526);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-meta {
+  grid-area: meta; font-size: 18px; font-weight: 700;
+  color: var(--ink-soft, #6d5540);
+}
+.lb-score {
+  grid-area: score; font-family: var(--font-display);
+  font-size: 30px; color: #8a4a06; text-align: right;
+}
+
+/* Top three get their own metal treatment; 4-10 stay clean and readable. */
+.lb-top1 { background: linear-gradient(170deg, #fff4cc 0%, #f2d178 100%); border-color: #b8860b;
+           box-shadow: 0 0 0 3px rgba(212,160,23,0.4), 0 4px 0 rgba(58,40,28,0.4); }
+.lb-top2 { background: linear-gradient(170deg, #fbfbf7 0%, #dcdfe3 100%); border-color: #8d949c;
+           box-shadow: 0 4px 0 rgba(58,40,28,0.35); }
+.lb-top3 { background: linear-gradient(170deg, #ffeedd 0%, #e8c19b 100%); border-color: #a9673a;
+           box-shadow: 0 4px 0 rgba(58,40,28,0.35); }
+.lb-top1 .lb-rank, .lb-top2 .lb-rank, .lb-top3 .lb-rank { font-size: 32px; }
+
+/* The row belonging to the player who just finished. */
+.lb-you { outline: 4px solid #2a9d8f; outline-offset: 2px; }
+
+#lbEmpty {
+  text-align: center; font-size: 22px; font-weight: 700;
+  color: var(--ink-soft, #6d5540); padding: 26px 10px;
+}
+
+/* ---- Rank result on the end card ---- */
+#endRankBlock {
+  margin: 12px auto 6px; padding: 14px 16px;
+  background: linear-gradient(170deg, rgba(255,252,240,0.9), rgba(232,216,180,0.65));
+  border: 3px solid var(--edge-brown, #4a3526);
+  border-radius: 12px 14px 10px 13px;
+  box-shadow: inset 0 2px 6px rgba(120,90,55,0.18);
+  text-align: center;
+}
+.rank-banner { font-family: var(--font-display); font-size: 27px; margin-bottom: 4px; }
+.rank-banner.rank-first { color: #b8860b; }
+.rank-banner.rank-in    { color: #2f6415; }
+.rank-banner.rank-hold  { color: var(--ink-soft, #6d5540); }
+.rank-banner.rank-out   { color: #8a4a06; }
+#endRankLine { font-size: 25px; font-weight: 800; color: var(--ink, #4a3526); }
+#endRankSub  { font-size: 19px; font-weight: 700; color: var(--ink-soft, #6d5540); margin-top: 2px; }
+
+/* A brief, restrained celebration — a single pop, not a distracting loop. */
+.rank-celebrate { animation: rankPop 0.6s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes rankPop {
+  0%   { transform: scale(0.9); }
+  55%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .rank-celebrate { animation: none; } }
+
+/* ================================================================
+   TOWN PROFILE — final sizing for the compact guide
+   Must come last: the sections above set #infoCard #infoCardText to
+   31px/33px for the previous long-form layout, which made the history
+   alone 277px tall and pushed the tool guide off the screen.
+   ================================================================ */
+#infoCard #infoCardText.town-history {
+  font-size: 24px;
+  line-height: 1.4;
+  margin: 0 auto 12px;
+  max-width: none;
+  opacity: 0.86;
+}
+#infoCard { padding-left: 18px; padding-right: 18px; }
+
+
+/* The 68px top padding is sized for the title badge on the long-form cards;
+   these two now carry larger body type, so the badge sits comfortably with
+   less room above it and the extra space goes to the text. */
+#objectiveCard, #infoCard { padding-top: 34px; }
+
+
+/* ================================================================
+   START BUTTON — chunky arcade "PLAY" style
+   Appended last so it wins over every theme layer above. Only the
+   idle (:not(.active)) state gets this treatment: once the storm is
+   running the panel is a status read-out, not a button, and reverts
+   to the calm parchment the rest of the HUD uses.
+   ================================================================ */
+#rainPanel:not(.active) {
+  /* Warm orange face with a thick cream outline and a hard bottom rim,
+     which is what gives these buttons their moulded, pressable look. */
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 46%, #f2861d 100%) !important;
+  border: calc(6 * var(--u)) solid #fffdf6 !important;
+  border-radius: calc(20 * var(--u)) !important;
+  color: #fff !important;
+  justify-content: center;
+  gap: calc(10 * var(--u));
+  box-shadow:
+    0 calc(6 * var(--u)) 0 rgba(226, 124, 38, 0.8),
+    0 calc(13 * var(--u)) calc(22 * var(--u)) rgba(0, 0, 0, 0.42),
+    inset 0 calc(-7 * var(--u)) 0 rgba(197, 88, 17, 0.42),
+    inset 0 calc(4 * var(--u)) 0 rgba(255, 255, 255, 0.55) !important;
+  animation: startBounce 2.1s ease-in-out infinite !important;
+}
+/* Gloss sweep across the upper half — the single highlight that reads as
+   moulded plastic rather than a flat fill. Reuses ::before, which the
+   theme layers were using as a thin left accent stripe. */
+#rainPanel:not(.active)::before {
+  content: '';
+  position: absolute;
+  left: calc(8 * var(--u)); right: calc(8 * var(--u));
+  top: calc(3 * var(--u)); bottom: auto;
+  width: auto !important; height: 40% !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.10) 70%, rgba(255,255,255,0) 100%) !important;
+  border-radius: calc(13 * var(--u)) calc(13 * var(--u)) 50% 50% / calc(13 * var(--u)) calc(13 * var(--u)) 100% 100%;
+  pointer-events: none;
+}
+#rainPanel:not(.active)::after { display: none !important; }
+
+/* Big white lettering with a hard lower rim, the way these cartoon
+   buttons carry their label. */
+#rainPanel:not(.active) #rainStatus {
+  font-size: calc(34 * var(--u));
+  font-weight: 900;
+  letter-spacing: calc(1.5 * var(--u));
+  color: #ffffff;
+  text-transform: uppercase;
+  line-height: 1;
+  text-shadow:
+    0 calc(3 * var(--u)) 0 rgba(190, 86, 18, 0.95),
+    0 calc(5 * var(--u)) calc(6 * var(--u)) rgba(120, 50, 10, 0.45);
+}
+/* The cloud icon is dropped from the idle state so the button is a single
+   clean word, like the reference. It returns with the running status. */
+#rainPanel:not(.active) #rainIcon { display: none; }
+
+@keyframes startBounce {
+  0%, 100% { transform: rotate(-1.1deg) scale(1); }
+  50%      { transform: rotate(-1.1deg) scale(1.035); }
+}
+#rainPanel:not(.active):hover  { transform: rotate(-1.1deg) translateY(calc(-2 * var(--u))); filter: brightness(1.05); }
+#rainPanel:not(.active):active {
+  transform: rotate(-1.1deg) translateY(calc(5 * var(--u)));
+  box-shadow:
+    0 calc(1 * var(--u)) 0 rgba(226,124,38,0.8),
+    0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(0,0,0,0.35),
+    inset 0 calc(-4 * var(--u)) 0 rgba(197,88,17,0.4),
+    inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.5) !important;
+  animation: none !important;
+}
+
+
+/* ================================================================
+   ARCADE THEME — one visual language for the whole UI
+   ----------------------------------------------------------------
+   Same recipe as the START button, applied everywhere: a thick cream
+   outline, a gradient face, a gloss band across the top and a hard
+   bottom rim so every surface looks moulded and pressable.
+
+   Colour carries ROLE, not decoration:
+     amber  = the primary action on the screen
+     green  = confirm / go
+     slate  = secondary, low-frequency (menu, back, exit)
+     cream  = read-only information (panels, cards, tool tiles)
+
+   Appended last so it wins over the earlier theme layers, which each
+   restyled these same elements in a different direction.
+   ================================================================ */
+
+:root {
+  --arc-cream: #fffdf6;
+  --arc-rim:   rgba(150, 96, 40, 0.55);
+}
+
+/* ---- Shared gloss for every arcade surface ---- */
+.hud-panel::after,
+#toolbox::after,
+.screen-card::after,
+#overlay button::after { content: none !important; }
+
+/* ---- Read-only HUD panels ---- */
+.hud-panel {
+  border: calc(5 * var(--u)) solid var(--arc-cream) !important;
+  border-radius: calc(18 * var(--u)) !important;
+  background: linear-gradient(180deg, #fdf3dc 0%, #f2e0bb 55%, #e6cf9f 100%) !important;
+  box-shadow:
+    0 calc(6 * var(--u)) 0 rgba(163, 122, 66, 0.75),
+    0 calc(11 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, 0.38),
+    inset 0 calc(-6 * var(--u)) 0 rgba(176, 133, 71, 0.30),
+    inset 0 calc(3 * var(--u)) 0 rgba(255, 255, 255, 0.75) !important;
+}
+#budgetPanel::before, #goalPanel::before {
+  content: '' !important;
+  position: absolute;
+  left: calc(7 * var(--u)); right: calc(7 * var(--u));
+  top: calc(3 * var(--u)); bottom: auto;
+  width: auto !important; height: 34% !important;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0)) !important;
+  border-radius: calc(12 * var(--u)) calc(12 * var(--u)) 50% 50% / calc(12 * var(--u)) calc(12 * var(--u)) 100% 100%;
+  pointer-events: none;
+}
+
+/* ---- Toolbox: same shell, tool tiles as small arcade chips ---- */
+#toolbox {
+  border: calc(5 * var(--u)) solid var(--arc-cream) !important;
+  border-right: none !important;
+  border-radius: calc(20 * var(--u)) 0 0 calc(20 * var(--u)) !important;
+  background: linear-gradient(180deg, #fdf3dc 0%, #f0dcb4 60%, #e3ca97 100%) !important;
+  box-shadow: calc(-7 * var(--u)) calc(5 * var(--u)) calc(20 * var(--u)) rgba(0,0,0,0.4),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.7) !important;
+}
+.tool-item {
+  border: calc(3 * var(--u)) solid var(--arc-cream) !important;
+  border-radius: calc(13 * var(--u)) !important;
+  background: linear-gradient(180deg, #fffaf0 0%, #f6e9cd 100%) !important;
+  box-shadow: 0 calc(4 * var(--u)) 0 rgba(163,122,66,0.6),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.8) !important;
+}
+.tool-item.armed {
+  background: linear-gradient(180deg, #ffe9a8 0%, #ffc24d 100%) !important;
+}
+.tool-item.disabled { filter: grayscale(0.55) brightness(0.94); }
+#toolboxToggle {
+  border: calc(4 * var(--u)) solid var(--arc-cream) !important;
+  border-right: none !important;
+  border-radius: calc(16 * var(--u)) 0 0 calc(16 * var(--u)) !important;
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 50%, #f2861d 100%) !important;
+  box-shadow: calc(-4 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u)) rgba(0,0,0,0.38),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.5) !important;
+}
+#toolboxToggle .bar { background: #fffdf6 !important; }
+
+/* ---- Overlay cards ---- */
+.screen-card {
+  border: calc(6 * var(--u)) solid var(--arc-cream) !important;
+  border-radius: calc(24 * var(--u)) !important;
+  background: linear-gradient(180deg, #fdf5e2 0%, #f4e6c6 55%, #e9d5ab 100%) !important;
+  box-shadow:
+    0 calc(8 * var(--u)) 0 rgba(150, 110, 58, 0.7),
+    0 calc(16 * var(--u)) calc(30 * var(--u)) rgba(0, 0, 0, 0.45),
+    inset 0 calc(3 * var(--u)) 0 rgba(255, 255, 255, 0.7) !important;
+  color: #4a3418;
+}
+.screen-card h1 { color: #7a4a12; }
+.edu-content-box, .tg-card, .mission-brief .mo-tip {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: calc(2 * var(--u)) solid rgba(180, 140, 80, 0.35) !important;
+  border-radius: calc(14 * var(--u)) !important;
+}
+.mission-brief .mo-hook, .mission-brief .mo-steps li,
+.town-history, .tg-line, .tool-guide-head { color: #4a3418; }
+.mission-brief .mo-goal { color: #3a2810; }
+.mission-brief .mo-goal b { color: #c2410c; }
+.tg-price { color: #166534 !important; background: rgba(34,197,94,0.2) !important; }
+
+/* ---- Buttons: one shape, three roles ---- */
+#overlay button,
+#instructionsBtn {
+  border: calc(4 * var(--u)) solid var(--arc-cream) !important;
+  border-radius: calc(16 * var(--u)) !important;
+  clip-path: none !important;
+  color: #fff !important;
+  font-weight: 900 !important;
+  text-transform: uppercase;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(90, 45, 10, 0.6) !important;
+  transition: transform .1s ease, box-shadow .1s ease, filter .15s ease;
+}
+#overlay button.btn-primary {
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 46%, #f2861d 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(197, 88, 17, 0.9),
+              0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.55) !important;
+}
+#overlay button.btn-success {
+  background: linear-gradient(180deg, #8ef2a8 0%, #35c463 48%, #17914a 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(14, 104, 55, 0.9),
+              0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.5) !important;
+}
+#overlay button.btn-secondary,
+#instructionsBtn {
+  background: linear-gradient(180deg, #9fb0c6 0%, #6b7f99 48%, #4d6079 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(48, 62, 82, 0.9),
+              0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.32),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.35) !important;
+}
+#instructionsBtn { opacity: .95; }
+#overlay button:active, #instructionsBtn:active {
+  transform: translateY(calc(5 * var(--u))) !important;
+  box-shadow: 0 calc(1 * var(--u)) 0 rgba(60,40,20,0.7),
+              0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,0.3),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.4) !important;
+}
+
+/* ---- Round arcade buttons ---- */
+#volumeBtn, .home-btn {
+  border: calc(4 * var(--u)) solid var(--arc-cream) !important;
+  background: linear-gradient(180deg, #9fb0c6 0%, #637792 50%, #4d6079 100%) !important;
+  box-shadow: 0 calc(5 * var(--u)) 0 rgba(48,62,82,0.85),
+              0 calc(8 * var(--u)) calc(14 * var(--u)) rgba(0,0,0,0.35) !important;
+  color: #fff !important;
+}
+
+
+/* ================================================================
+   HUD LAYOUT — a real grid
+   ----------------------------------------------------------------
+   Before: the two stacked rows used different gutters (the left
+   column had a 2u gap under the budget panel, the right column 10u),
+   START was 228x96 while MENU was auto-width x 50, and the three
+   top edges (gauge, panels, second row) sat at unrelated offsets.
+   The result read as four loose objects rather than a HUD.
+
+   Now it is two symmetric 228u columns on a consistent 12u vertical
+   rhythm, so every edge lines up:
+
+     y   8-47   wave gauge (canvas, FULL width; 34u + a 5u bottom rim).
+                It spans the whole band so the top-left and top-right
+                corners are filled — a narrow centred gauge left empty sky
+                above both panels, which read as a gap.
+     y  52-174  budget            |  protect village
+     y 186-270  START             |  menu
+
+   Hierarchy is carried by COLOUR, not by size — START is amber and
+   loud, MENU is the same footprint but slate and quiet — so the
+   alignment can stay perfectly regular.
+   ================================================================ */
+#budgetPanel, #goalPanel { top: calc(76 * var(--u)) !important; }
+
+#rainPanel {
+  top: calc(210 * var(--u)) !important;
+  left: calc(15 * var(--u)) !important;
+  width: calc(228 * var(--u)) !important;
+  height: calc(84 * var(--u)) !important;
+}
+#instructionsBtn {
+  top: calc(210 * var(--u)) !important;
+  right: calc(15 * var(--u)) !important;
+  width: calc(228 * var(--u)) !important;
+  height: calc(84 * var(--u)) !important;
+  padding: 0 !important;
+  border-radius: calc(18 * var(--u)) !important;
+  font-size: calc(22 * var(--u)) !important;
+}
+/* Both second-row controls share one type size so the row reads level. */
+#rainPanel:not(.active) #rainStatus { font-size: calc(31 * var(--u)); }
+
+
+/* ---- Exit buttons: red ----
+   Red is reserved for LEAVING the game — the two actions that throw away
+   the current run. Deliberately not applied to Back/Return, which are
+   ordinary navigation within the menus and stay slate; if every backward
+   step were red, red would stop meaning "careful". */
+#overlay button#exitToKioskBtn,
+#overlay button#restartBtn {
+  background: linear-gradient(180deg, #ff8f7a 0%, #e5462f 48%, #b82a19 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(140, 30, 18, 0.9),
+              0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.45) !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(110, 25, 15, 0.75) !important;
+}
+#overlay button#exitToKioskBtn:active,
+#overlay button#restartBtn:active {
+  box-shadow: 0 calc(1 * var(--u)) 0 rgba(140, 30, 18, 0.8),
+              0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,0.3),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.4) !important;
+}
+
+
+/* ---- Earned titles on the end screen ---- */
+#earnedTitles {
+  margin: calc(10 * var(--u)) 0;
+  padding: calc(9 * var(--u)) calc(12 * var(--u));
+  border-radius: calc(14 * var(--u));
+  background: rgba(255, 255, 255, 0.5);
+  border: calc(2 * var(--u)) solid rgba(180, 140, 80, 0.35);
+  text-align: left;
+}
+#earnedTitles .et-head {
+  font-size: 15px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1px; opacity: 0.6; margin-bottom: 5px; color: #4a3418;
+}
+#earnedTitles .et-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 3px 0;
+}
+#earnedTitles .et-row + .et-row { border-top: 1px solid rgba(150, 110, 60, 0.18); }
+#earnedTitles .et-icon { font-size: 21px; flex: 0 0 auto; }
+#earnedTitles .et-text { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+#earnedTitles .et-text b { font-size: 17px; color: #4a3418; }
+#earnedTitles .et-text i { font-size: 14px; opacity: 0.7; font-style: normal; color: #5b4527; }
+
+
+/* ================================================================
+   SQUARE EVERYTHING
+   ----------------------------------------------------------------
+   Several elements carried a small rotation or a parallelogram
+   clip-path from the earlier "sticker" styling: overlay buttons
+   (-0.6deg + a skewed tab shape), the tool tiles, the town cards on
+   hover, and the in-game START button (-1.1deg). Mixed with the
+   arcade panels — which are all square — they read as misaligned
+   rather than playful.
+
+   Everything now sits square. The press feedback is kept, but it is
+   pure vertical travel: the button dips into its own shadow instead
+   of tilting. Only genuine rotations that carry meaning are left
+   alone: the diamond landmark dots, the toolbox chevron, and the
+   tape corners on the cards.
+   ================================================================ */
+#overlay button,
+#overlay button:hover,
+#overlay button:active,
+#instructionsBtn,
+#rainPanel,
+#rainPanel:not(.active),
+#rainPanel:not(.active):hover,
+#rainPanel:not(.active):active,
+.tool-item,
+.tool-item:hover:not(.disabled),
+#townCard .town-card:hover:not(.selected) {
+  clip-path: none !important;
+  rotate: none !important;
+}
+/* Rewrite the transforms so no rotation survives, keeping the travel. */
+#overlay button              { transform: none !important; }
+#overlay button:hover        { transform: translateY(calc(-2 * var(--u))) !important; }
+#overlay button:active       { transform: translateY(calc(5 * var(--u))) !important; }
+#instructionsBtn:hover       { transform: translateY(calc(-2 * var(--u))) !important; }
+#instructionsBtn:active      { transform: translateY(calc(5 * var(--u))) !important; }
+.tool-item:hover:not(.disabled) { transform: translateY(calc(-3 * var(--u))) !important; }
+#townCard .town-card:hover:not(.selected) { transform: translateY(-3px) !important; }
+
+/* START: bounce in place, no tilt. */
+@keyframes startBounce {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+#rainPanel:not(.active):hover  { transform: translateY(calc(-2 * var(--u))) !important; animation: none !important; }
+#rainPanel:not(.active):active { transform: translateY(calc(5 * var(--u))) !important; animation: none !important; }
+
+
+/* ---- Town Profile: the mission conditions strip ----
+   States the two things a player otherwise has to infer: how long a storm
+   runs, and how many homes may be lost before this particular town is
+   considered lost. The limit is town-specific, so it is generated in
+   showTownInfo() rather than written into the markup. */
+.town-objective {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; margin: 0 0 12px;
+}
+.town-objective .obj-chip {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 6px 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 2px solid rgba(180, 140, 80, 0.35);
+  text-align: center;
+}
+.town-objective .obj-num {
+  font-size: 19px; font-weight: 900; line-height: 1.05; color: #4a3418;
+}
+.town-objective .obj-lbl {
+  font-size: 13px; line-height: 1.15; opacity: 0.75; color: #5b4527;
+}
+.town-objective .obj-chip.danger {
+  background: rgba(229, 70, 47, 0.12);
+  border-color: rgba(185, 40, 25, 0.4);
+}
+.town-objective .obj-chip.danger .obj-num { color: #a3301c; }
+
+
+/* ================================================================
+   TOASTS — out of the playfield
+   ----------------------------------------------------------------
+   Combo bonuses, money-bag pickups, "House lost!" and the wave
+   messages were appearing at top:40% — dead centre of the screen,
+   directly over the town and the descending lahar. They covered the
+   exact thing the player is watching, at the exact moment something
+   important was happening.
+
+   They now sit in the one horizontal band that carries no UI and no
+   gameplay: below the HUD (which ends at y191) and above the
+   placeable ground (which starts at GRASS_MIN_Y = 360). Nothing can
+   be built there and no building stands there, so a message can
+   never hide something the player needs to see or tap.
+   ================================================================ */
+#toast {
+  top: 22% !important;            /* ~211px: inside the free band */
+  left: 50% !important;
+  bottom: auto !important;
+  transform: translate(-50%, 0) scale(0.86) !important;
+  max-width: 72% !important;
+  z-index: 45 !important;
+}
+#toast.show {
+  transform: translate(-50%, 0) scale(1) !important;
+}
+
+
+/* ================================================================
+   TOWN PROFILE — larger, legible type
+   ----------------------------------------------------------------
+   The tool guide was a 2-column grid, which left each description
+   about 230px wide and wrapped it to five short lines. Going to one
+   full-width column per tool roughly halves the line count for the
+   same text, which buys the room to set everything noticeably
+   bigger without the card growing. The rest comes from the 68px top
+   padding, which was sized for the old long-form layout.
+   ================================================================ */
+#infoCard { padding-top: 36px !important; padding-bottom: 22px !important; }
+
+/* Two columns beats one here: four tall full-width rows came to 409px,
+   where 2x2 cells come to ~280px for the same text. The room for larger
+   type is bought by shortening the copy instead. */
+.tool-guide { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+
+.tg-icon { width: 42px !important; height: 42px !important; }
+.tg-name { font-size: 23px !important; }
+.tg-price { font-size: 19px !important; }
+.tg-line { font-size: 20px !important; line-height: 1.3 !important; }
+
+#infoCard #infoCardText.town-history { font-size: 26px; line-height: 1.4; }
+.tool-guide-head { font-size: 20px !important; }
+
+.town-objective .obj-num { font-size: 22px !important; }
+.town-objective .obj-lbl { font-size: 14px !important; }
+
+
+/* ================================================================
+   VOLUME — a floating control, above every screen
+   ----------------------------------------------------------------
+   #overlay (the menu cards) sits at z-index 50 while the volume
+   control sat at 40, so the button was buried behind the Mission
+   Objective, town-selection, town-profile, leaderboard and end
+   screens — it was only reachable during actual play. It now floats
+   above the overlay so the visitor can change the sound from any
+   screen in the game.
+   ================================================================ */
+#volumeControl { z-index: 60 !important; }
+#volumePopover { z-index: 61 !important; }
+
+
+/* ---- Records / achievement role: violet ----
+   The two Leaderboard buttons were slate on one screen and GREEN on the
+   other — green being the same colour as Start Game, so "view the records"
+   looked like "begin playing". Violet is reserved for them: it is clearly
+   not an advance (amber), not a go (green), not an exit (red) and not
+   plain navigation (slate), and it reads as something special. */
+#overlay button.btn-trophy {
+  background: linear-gradient(180deg, #d7b3ff 0%, #9b5de5 48%, #6d28d9 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(76, 29, 149, 0.9),
+              0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.35),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.45) !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(60, 20, 110, 0.75) !important;
+}
+#overlay button.btn-trophy:active {
+  box-shadow: 0 calc(1 * var(--u)) 0 rgba(76, 29, 149, 0.85),
+              0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,0.3),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.4) !important;
+}
+
+
+/* ---- Victory confetti layer ----
+   Above the menu overlay (z-index 50) so it falls IN FRONT of the win
+   card, but below the volume button (60) so that stays reachable.
+   pointer-events:none is essential — a full-screen canvas would otherwise
+   swallow every tap on the buttons underneath it. */
+#confettiLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 55;
+  pointer-events: none;
+  display: none;
+}
+
+
+/* ================================================================
+   SOUND SETTINGS — in the menu, under Leaderboard
+   ----------------------------------------------------------------
+   Replaces the control that floated over the playfield: it covered
+   the town and could be knocked while placing tools. Music and
+   effects are separate channels, so the looping storm can be
+   silenced without losing the cues that tell the player what is
+   happening.
+   ================================================================ */
+#soundSettings {
+  margin-top: 2px;
+  padding: 7px 12px;
+  border-radius: calc(14 * var(--u));
+  background: rgba(255, 255, 255, 0.5);
+  border: calc(2 * var(--u)) solid rgba(180, 140, 80, 0.35);
+  text-align: left;
+}
+#soundSettings .ss-title {
+  font-size: 13px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 1px; opacity: 0.55; color: #4a3418; margin-bottom: 3px;
+}
+#soundSettings .ss-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 2px 0; cursor: pointer;
+}
+#soundSettings .ss-row + .ss-row { border-top: 1px solid rgba(150, 110, 60, 0.18); }
+#soundSettings .ss-icon { font-size: 17px; flex: 0 0 auto; }
+#soundSettings .ss-label {
+  font-size: 15px; font-weight: 800; color: #4a3418;
+  flex: 0 0 auto; min-width: 60px;
+}
+#soundSettings input[type="range"] {
+  flex: 1 1 auto; min-width: 0;
+  accent-color: #f2861d;
+  height: 22px;                       /* still a comfortable touch target */
+}
+#soundSettings .ss-value {
+  font-size: 14px; font-weight: 800; color: #5b4527;
+  min-width: 40px; text-align: right; flex: 0 0 auto;
+}
+
+
+/* The menu card now carries the sound panel as well as four buttons, so the
+   touch-target floor comes down slightly to keep the whole card on one
+   screen. 48px is still comfortably above the 44px guideline. */
+#overlay button { min-height: 48px !important; }
+#objectiveCard { padding-top: 26px !important; }
+
+#soundSettings { padding-top: 5px !important; padding-bottom: 5px !important; }
+#objectiveCard .mission-brief .mo-tip { padding-top: 7px; padding-bottom: 7px; }
+
+
+/* "START GAME" was wrapping to two lines, making that button 98px tall and
+   pushing the Town Profile off the bottom of the screen. A slightly smaller
+   face fits it on one line and gives the card back ~40px. */
+#confirmStartBtn { font-size: calc(26 * var(--u)) !important; white-space: nowrap; }
+#backToTownFromInfoBtn { font-size: calc(26 * var(--u)) !important; white-space: nowrap; }
+
+
+/* ================================================================
+   SOUND SETTINGS — arcade styling
+   ----------------------------------------------------------------
+   The panel previously used the browser's default range inputs,
+   which looked like a settings dialog dropped into a cartoon game.
+   The tracks and thumbs are now built to match the buttons: cream
+   outline, warm amber fill, a raised thumb with a hard bottom rim.
+   ================================================================ */
+#soundSettings {
+  margin-top: 2px;
+  padding: calc(9 * var(--u)) calc(12 * var(--u)) !important;
+  border-radius: calc(16 * var(--u));
+  border: calc(3 * var(--u)) solid #fffdf6;
+  background: linear-gradient(180deg, #fffaf0 0%, #f2e3c2 100%);
+  box-shadow: 0 calc(4 * var(--u)) 0 rgba(163,122,66,0.55),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.75);
+  text-align: left;
+}
+#soundSettings .ss-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 0; cursor: pointer;
+}
+#soundSettings .ss-row + .ss-row { border-top: 1px solid rgba(150,110,60,0.2); }
+
+/* Icon sits in a slate chip, echoing the secondary buttons. */
+#soundSettings .ss-chip {
+  flex: 0 0 auto;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  border: 2px solid #fffdf6;
+  background: linear-gradient(180deg, #9fb0c6 0%, #637792 50%, #4d6079 100%);
+  box-shadow: 0 2px 0 rgba(48,62,82,0.8);
+}
+#soundSettings .ss-label {
+  font-size: 16px; font-weight: 800; color: #4a3418;
+  flex: 0 0 auto; min-width: 62px;
+}
+#soundSettings .ss-value {
+  font-size: 14px; font-weight: 800; color: #7a4a12;
+  min-width: 44px; text-align: center; flex: 0 0 auto;
+  background: rgba(245,158,11,0.18);
+  border-radius: 999px; padding: 2px 6px;
+}
+
+/* ---- The slider itself ---- */
+#soundSettings input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  flex: 1 1 auto; min-width: 0;
+  height: 26px;                      /* touch target; the track is drawn thinner */
+  background: transparent;
+  cursor: pointer;
+  --fill: 70%;
+}
+#soundSettings input[type="range"]::-webkit-slider-runnable-track {
+  height: 13px; border-radius: 999px;
+  border: 2px solid #fffdf6;
+  /* Amber up to the current value, dark beyond it. */
+  background: linear-gradient(90deg,
+      #ffb733 0 var(--fill), #6b6250 var(--fill) 100%);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.35);
+}
+#soundSettings input[type="range"]::-moz-range-track {
+  height: 13px; border-radius: 999px;
+  border: 2px solid #fffdf6;
+  background: linear-gradient(90deg,
+      #ffb733 0 var(--fill), #6b6250 var(--fill) 100%);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.35);
+}
+#soundSettings input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 50%;
+  margin-top: -6.5px;                /* centre it on the 13px track */
+  border: 3px solid #fffdf6;
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 50%, #f2861d 100%);
+  box-shadow: 0 3px 0 rgba(197,88,17,0.85), 0 5px 8px rgba(0,0,0,0.3);
+  transition: transform .08s ease;
+}
+#soundSettings input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid #fffdf6;
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 50%, #f2861d 100%);
+  box-shadow: 0 3px 0 rgba(197,88,17,0.85), 0 5px 8px rgba(0,0,0,0.3);
+}
+#soundSettings input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
+
+/* Silent state reads at a glance without hunting for the number. */
+#soundSettings .ss-row.muted .ss-label,
+#soundSettings .ss-row.muted .ss-value { opacity: 0.5; }
+#soundSettings .ss-row.muted .ss-chip {
+  background: linear-gradient(180deg, #b9938f 0%, #8d5f5a 50%, #6d4340 100%);
+}
+#soundSettings .ss-row.muted .ss-value { background: rgba(180,60,40,0.16); color: #8d3320; }
+
+
+/* Trim the sound panel so the menu card still clears the screen: the arcade
+   chip and thicker track added height that the card could not absorb. */
+#soundSettings { padding: calc(6 * var(--u)) calc(10 * var(--u)) !important; }
+#soundSettings .ss-row { padding: 2px 0; gap: 8px; }
+#soundSettings .ss-chip { width: 25px; height: 25px; font-size: 13px; border-width: 2px; }
+#soundSettings .ss-label { font-size: 15px; min-width: 56px; }
+#soundSettings .ss-value { font-size: 13px; min-width: 40px; }
+#soundSettings input[type="range"] { height: 21px; }
+#soundSettings input[type="range"]::-webkit-slider-runnable-track { height: 11px; }
+#soundSettings input[type="range"]::-moz-range-track { height: 11px; }
+#soundSettings input[type="range"]::-webkit-slider-thumb {
+  width: 19px; height: 19px; margin-top: -5.5px;
+}
+#soundSettings input[type="range"]::-moz-range-thumb { width: 19px; height: 19px; }
+
+
+/* ================================================================
+   TOOLBOX HANDLE — an arrow, so it reads as openable
+   ----------------------------------------------------------------
+   The handle used to be two plain bars, which says "grip" at best
+   and nothing at all to most players. It now carries a chevron that
+   points the way the panel will move — left to pull it open, right
+   to push it shut — plus a TOOLS label, and it breathes gently
+   while the panel is closed so a first-time player notices it.
+   ================================================================ */
+#toolboxToggle {
+  /* Anchored to the panel's own edge rather than a fixed negative offset.
+     A hand-tuned offset only held at one screen width: the handle keeps a
+     fixed pixel size while the layout scales, so on a 390px-wide screen it
+     overhung the panel and 14px of the arrow was clipped away. right:100%
+     parks it flush against the panel edge at every size. */
+  width: calc(50 * var(--u)) !important;
+  left: auto !important;
+  /* +4u clears the panel's own border, which right:100% does not account
+     for — without it the handle overhung the stage by ~3px. */
+  right: calc(100% + 7 * var(--u)) !important;
+  height: calc(104 * var(--u)) !important;
+  flex-direction: column !important;
+  gap: calc(5 * var(--u));
+}
+#toolboxToggle .tb-chevron {
+  width: calc(15 * var(--u)); height: calc(15 * var(--u));
+  border-left: calc(5 * var(--u)) solid #4a5568;
+  border-bottom: calc(5 * var(--u)) solid #4a5568;
+  border-radius: calc(2 * var(--u));
+  /* Points LEFT while closed: the direction the panel travels when opened. */
+  transform: rotate(45deg);
+  transition: transform .22s ease;
+}
+#toolbox:not(.collapsed) #toolboxToggle .tb-chevron {
+  transform: rotate(-135deg);        /* flips to point right = push shut */
+}
+#toolboxToggle .tb-label {
+  font-size: calc(13 * var(--u));
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #4a5568;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  line-height: 1;
+}
+
+/* While it is shut, a slow nudge draws the eye without nagging. */
+@keyframes toolboxNudge {
+  0%, 82%, 100% { transform: translateY(-50%) translateX(0); }
+  88%           { transform: translateY(-50%) translateX(calc(-5 * var(--u))); }
+  94%           { transform: translateY(-50%) translateX(0); }
+}
+#toolbox.collapsed #toolboxToggle {
+  animation: toolboxNudge 3.4s ease-in-out infinite;
+}
+#toolbox:not(.collapsed) #toolboxToggle { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #toolbox.collapsed #toolboxToggle { animation: none; }
+}
+
+
+/* ================================================================
+   TOOLBOX HANDLE v2
+   ----------------------------------------------------------------
+   The first version was too narrow and set TOOLS as stacked upright
+   letters, which read as a cramped column of characters rather than
+   a word. This widens the tab, rotates the label so it reads as one
+   word bottom-to-top, enlarges the chevron, and gives the tab the
+   same moulded treatment as the buttons: cream outline, gloss over
+   the top half, and a hard inner rim.
+   ================================================================ */
+#toolboxToggle {
+  width: calc(62 * var(--u)) !important;
+  height: calc(150 * var(--u)) !important;
+  gap: calc(9 * var(--u)) !important;
+  border: calc(4 * var(--u)) solid #fffdf6 !important;
+  border-right: none !important;
+  border-radius: calc(20 * var(--u)) 0 0 calc(20 * var(--u)) !important;
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 46%, #f2861d 100%) !important;
+  box-shadow:
+    calc(-5 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u)) rgba(0,0,0,0.38),
+    inset 0 calc(4 * var(--u)) 0 rgba(255,255,255,0.55),
+    inset 0 calc(-5 * var(--u)) 0 rgba(197,88,17,0.4) !important;
+  overflow: hidden;
+}
+/* Gloss across the upper half, matching the arcade buttons. */
+#toolboxToggle::after {
+  content: '';
+  position: absolute;
+  left: calc(5 * var(--u)); right: 0; top: calc(3 * var(--u));
+  height: 38%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.08) 75%, rgba(255,255,255,0) 100%);
+  border-radius: calc(14 * var(--u)) 0 50% 50% / calc(14 * var(--u)) 0 100% 100%;
+  pointer-events: none;
+}
+#toolboxToggle .tb-chevron {
+  width: calc(20 * var(--u)) !important;
+  height: calc(20 * var(--u)) !important;
+  border-left-width: calc(6 * var(--u)) !important;
+  border-bottom-width: calc(6 * var(--u)) !important;
+  border-left-color: #6b3410 !important;
+  border-bottom-color: #6b3410 !important;
+  filter: drop-shadow(0 calc(2 * var(--u)) 0 rgba(255,244,214,0.6));
+  position: relative; z-index: 1;
+}
+/* One word reading bottom-to-top, rather than a stack of letters. */
+#toolboxToggle .tb-label {
+  writing-mode: vertical-rl !important;
+  text-orientation: mixed !important;
+  transform: rotate(180deg);
+  font-size: calc(19 * var(--u)) !important;
+  font-weight: 900 !important;
+  letter-spacing: calc(3 * var(--u)) !important;
+  color: #6b3410 !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(255,244,214,0.55);
+  position: relative; z-index: 1;
+}
+
+
+/* ================================================================
+   TOOLBOX PANEL — smaller, and lifted clear of the town
+   ----------------------------------------------------------------
+   The open panel was 120x297 sitting at y331, which put it right
+   over the built-up ground: it covered three buildings in Bacolor
+   and Porac while the player was trying to place tools next to
+   them. It is now shorter and anchored near the TOP of the stage,
+   in the band between the HUD and the placeable ground, so it
+   overlaps as little of the town as possible.
+   ================================================================ */
+#toolbox {
+  top: calc(300 * var(--u)) !important;      /* anchored high, not centred */
+  transform: none !important;
+  height: calc(300 * var(--u)) !important;   /* was 462u */
+  width: calc(160 * var(--u)) !important;    /* was 186u */
+  padding: calc(14 * var(--u)) calc(8 * var(--u)) calc(10 * var(--u)) !important;
+  gap: calc(6 * var(--u));
+}
+#toolbox.collapsed { transform: translateX(100%) !important; }
+
+/* Cards trimmed to match the shorter panel. */
+.tool-item {
+  padding: calc(6 * var(--u)) calc(7 * var(--u)) !important;
+  gap: calc(7 * var(--u)) !important;
+  border-radius: calc(11 * var(--u)) !important;
+}
+.tool-icon {
+  width: calc(38 * var(--u)) !important;
+  height: calc(38 * var(--u)) !important;
+  padding: calc(3 * var(--u)) !important;
+}
+.tool-text { gap: calc(1 * var(--u)) !important; }
+.tool-name { font-size: calc(13 * var(--u)) !important; }
+.tool-price {
+  font-size: calc(12 * var(--u)) !important;
+  padding: calc(1 * var(--u)) calc(5 * var(--u)) !important;
+}
+/* The handle rides with the panel, so it needs the same anchor. */
+#toolboxToggle { top: calc(96 * var(--u)) !important; transform: none !important; }
+@keyframes toolboxNudge {
+  0%, 82%, 100% { transform: translateX(0); }
+  88%           { transform: translateX(calc(-5 * var(--u))); }
+  94%           { transform: translateX(0); }
+}
+
+
+/* The 60px touch floor made four cards 240px tall on their own, which no
+   longer fits the shortened panel. 46px is still comfortably above the
+   44px minimum target while letting all four sit in the smaller panel
+   without scrolling. */
+.tool-item { min-height: 46px !important; }
+#toolbox { height: calc(346 * var(--u)) !important; }
+
+
+/* The card touch floor is a fixed 46px while the panel height scales with
+   the stage, so on a small screen the panel shrank below what four cards
+   need and the list started scrolling. This floor keeps all four visible:
+   4 x 46 + gaps + padding. */
+#toolbox { min-height: 232px !important; }
+
+
+/* ---- Panel hugs its tools ----
+   Fixing the panel's height (and a min-height floor to stop small screens
+   scrolling) left 17px of empty tray under the Dike card. Sizing to content
+   removes the gap AND solves the scrolling case properly: the panel simply
+   grows to whatever the four cards need, at any screen size, instead of
+   being pinned to a guessed number. */
+#toolbox {
+  height: auto !important;
+  min-height: 0 !important;
+  padding-bottom: calc(8 * var(--u)) !important;
+}
+#toolItemsContainer {
+  flex: 0 0 auto !important;     /* don't stretch to fill the old fixed height */
+  overflow: visible !important;  /* nothing to scroll once the panel fits */
+  width: 100%;
+}
+
+
+/* The leftover tray under the Dike was three paddings stacking: the card
+   container's own bottom padding, the panel's, and the panel border. The
+   container contributes nothing now, and the panel's top and bottom
+   padding match so the tools sit evenly inside it. */
+#toolItemsContainer { padding: 0 !important; }
+#toolbox {
+  padding-top: calc(12 * var(--u)) !important;
+  padding-bottom: calc(12 * var(--u)) !important;
+}
+
+
+/* ================================================================
+   HUD PANELS — one instrument cluster
+   ----------------------------------------------------------------
+   The panels had drifted apart: the budget used a neon green on
+   parchment with a stray paper-fold wedge in its corner, the goal
+   panel stacked TWO progress indicators for the same number, and
+   the storm panel sat in flat grey while everything around it was
+   warm parchment and amber. Each was fine alone; together they did
+   not read as one instrument.
+
+   Common treatment below — parchment face, cream outline, gloss on
+   the top half, hard bottom rim — then per-panel fixes.
+   ================================================================ */
+#budgetPanel, #goalPanel {
+  border: calc(4 * var(--u)) solid #fffdf6 !important;
+  border-radius: calc(18 * var(--u)) !important;
+  background: linear-gradient(180deg, #fdf5e2 0%, #f3e4c2 55%, #e7d3a8 100%) !important;
+  box-shadow: 0 calc(6 * var(--u)) 0 rgba(163,122,66,0.75),
+              0 calc(10 * var(--u)) calc(18 * var(--u)) rgba(0,0,0,0.34),
+              inset 0 calc(3 * var(--u)) 0 rgba(255,255,255,0.8) !important;
+  overflow: hidden;
+  position: absolute;
+}
+/* Gloss across the upper half, matching the buttons and the wave gauge. */
+#budgetPanel::after, #goalPanel::after {
+  content: '';
+  position: absolute; left: calc(5 * var(--u)); right: calc(5 * var(--u));
+  top: calc(3 * var(--u)); height: 38%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.06) 100%);
+  border-radius: calc(13 * var(--u)) calc(13 * var(--u)) 50% 50% / calc(13 * var(--u)) calc(13 * var(--u)) 100% 100%;
+  pointer-events: none;
+}
+/* The stray paper-fold wedge in the budget's corner — it belonged to an
+   older sticker look and now just reads as a rendering artefact. */
+#budgetPanel::before { display: none !important; }
+
+/* ---- Budget ----
+   The value was a saturated green that matched nothing else on screen and
+   fought the amber theme. Money now reads in the same warm brown as the
+   rest of the HUD, with the amber reserved for the bar. */
+#budgetPanel .panel-label,
+#budgetPanel > div:first-child {
+  color: #7a5a28 !important;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+}
+#budgetPanel .budget-value, #budgetValue {
+  color: #3f2d12 !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.75);
+}
+
+/* ---- Goal ----
+   NOTE: the diamonds and the segmented strip below them are NOT duplicates.
+   The diamonds are the named landmarks; the strip is one segment per
+   ordinary house. I nearly hid the strip as redundant — it is the only
+   thing showing how many homes are left, so both stay. They are separated
+   and tidied instead. */
+#goalPanel .label { color: #2f6b34 !important; letter-spacing: 0.6px; }
+#houseDots { gap: calc(2 * var(--u)) !important; margin-top: calc(3 * var(--u)); }
+
+/* ---- Storm panel ----
+   Flat grey while idle made the most important control on the HUD look
+   disabled. Active state now reads as live: a deep storm blue with a
+   pulsing edge, clearly "running" rather than "greyed out". */
+#rainPanel.active {
+  background: linear-gradient(180deg, #4f6d93 0%, #35506f 52%, #24384f 100%) !important;
+  border-color: #16263a !important;
+  color: #e8f0fa !important;
+  box-shadow: 0 calc(5 * var(--u)) 0 #16263a,
+              0 calc(9 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,0.42),
+              inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.28) !important;
+  animation: stormPulse 2.4s ease-in-out infinite;
+}
+@keyframes stormPulse {
+  0%, 100% { border-color: #16263a; }
+  50%      { border-color: #4d86c4; }
+}
+@media (prefers-reduced-motion: reduce) { #rainPanel.active { animation: none; } }
+
+
+/* ---- Budget: the real selectors ----
+   My first pass targeted .budget-value / #budgetValue, which do not exist —
+   the element is #budgetAmount. The neon green was also fighting the warm
+   HUD; this is a deeper, richer money green that still reads as currency
+   but belongs on parchment. */
+#budgetPanel .label { color: #7a5a28 !important; letter-spacing: 1.6px; font-weight: 800; }
+#budgetPanel .amount, #budgetAmount {
+  color: #14713a !important;
+  text-shadow: 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.8);
+  letter-spacing: 0.5px;
+}
+/* Bar: recessed track with a lit fill, so it reads as a gauge rather than
+   a flat green stripe. */
+#budgetBar {
+  border-radius: 999px !important;
+  background: rgba(88, 66, 32, 0.28) !important;
+  box-shadow: inset 0 calc(2 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,0.3) !important;
+  overflow: hidden;
+}
+#budgetBarFill {
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 55%, #12813c 100%) !important;
+  box-shadow: inset 0 calc(2 * var(--u)) 0 rgba(255,255,255,0.45);
+}
+
+
+/* The storm panel keeps a 6px amber accent strip (::before) from its idle
+   "press me" styling. Once the storm is running the panel turns deep blue,
+   and that leftover amber read as a rendering artefact down its left edge.
+   It becomes a cool highlight that belongs to the active state. */
+#rainPanel.active::before {
+  background: linear-gradient(180deg, #7fb2e8, #3a6ea5) !important;
+}
+
+
+/* ================================================================
+   OVERLAY CARDS — hierarchy and finish
+   ================================================================ */
+
+/* ---- Button order ----
+   "Exit to Menu" was rendering FIRST, above the primary action, so the
+   most destructive control on the card was also the most prominent and the
+   first thing a thumb reaches. Ordered by intent instead: resume, then the
+   action that moves you forward, then the side trip, then leaving. Done
+   with flex order so no markup or handler moves. */
+#objectiveCard .action-row { display: flex; flex-direction: column; }
+#closeMenuBtn        { order: 1; }
+#nextToTownBtn       { order: 2; }
+#openLeaderboardBtn  { order: 3; }
+#soundSettings       { order: 4; }
+#exitToKioskBtn      { order: 5; margin-top: calc(4 * var(--u)); }
+
+/* The primary action should be unmistakable at a glance. */
+#nextToTownBtn { transform: scale(1.02); }
+
+/* ---- The stray paper-fold wedge ----
+   The same artefact I removed from the HUD panels is on the overlay cards:
+   a light triangle pinned to the top-left corner, left over from an older
+   sticker look. It reads as a rendering glitch rather than decoration. */
+#objectiveCard::before, #infoCard::before, #townCard::before,
+#nameCard::before, #endCard::before, #leaderboardCard::before {
+  display: none !important;
+}
+
+/* ---- The briefing box ----
+   It was a flat pale rectangle that barely separated from the card behind
+   it. Now recessed, so the mission text reads as a panel set INTO the card
+   rather than a lighter patch floating on it. */
+#objectiveCard .mission-brief,
+#infoCard .town-history-wrap {
+  background: linear-gradient(180deg, rgba(255,252,242,0.95), rgba(248,238,216,0.95)) !important;
+  border: calc(2 * var(--u)) solid rgba(163,122,66,0.34) !important;
+  border-radius: calc(16 * var(--u)) !important;
+  box-shadow: inset 0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(120,90,40,0.13),
+              0 calc(2 * var(--u)) 0 rgba(255,255,255,0.7) !important;
+}
+
+/* ---- Numbered steps ----
+   Give the step numbers the same moulded chip treatment as the rest of the
+   UI so they match the toolbox icons and sound-panel chips. */
+#objectiveCard .mo-num {
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 52%, #f2861d 100%) !important;
+  border: calc(2 * var(--u)) solid #fffdf6 !important;
+  color: #6b3410 !important;
+  box-shadow: 0 calc(2 * var(--u)) 0 rgba(197,88,17,0.55);
+  font-weight: 900;
+}
+
+/* ---- The tip strip ----
+   Reads as an aside rather than another paragraph of the brief. */
+#objectiveCard .mo-tip {
+  background: rgba(245,158,11,0.13) !important;
+  border: calc(2 * var(--u)) dashed rgba(180,120,40,0.5) !important;
+  border-radius: calc(14 * var(--u)) !important;
+}
+
+
+/* The reordered stack put the card 4px past the bottom of the stage at the
+   target 540x960. Trimmed from the gaps rather than the type, so nothing
+   gets harder to read. */
+#objectiveCard { padding-bottom: 16px !important; }
+#objectiveCard .action-row { gap: calc(8 * var(--u)) !important; }
+#exitToKioskBtn { margin-top: 0 !important; }
+
+
+/* ================================================================
+   CHOOSE MUNICIPALITY
+   ----------------------------------------------------------------
+   This screen was unusable at the target size: the card ran to
+   1219px inside a ~950px stage, so the heading was cut off above
+   and Angeles' Select button sat at y976 — literally unreachable
+   on a kiosk with no scrolling. The town cards were ~280px each,
+   mostly long prose.
+
+   Rebuilt as compact rows. Each town now states the ONE thing a
+   player needs to choose between them — its hazard and how hard it
+   plays — rather than a paragraph of description. That is also the
+   better design: the choice should tell you what you are signing
+   up for, not just where it is.
+   ================================================================ */
+.town-intro {
+  font-size: 20px; text-align: center; line-height: 1.35;
+  margin: 0 0 10px; color: #5b4527;
+}
+#townList { gap: 9px !important; }
+
+.town-card {
+  min-height: 0 !important;
+  padding: calc(9 * var(--u)) calc(11 * var(--u)) !important;
+  border-radius: calc(16 * var(--u)) !important;
+  display: flex; align-items: center; gap: calc(10 * var(--u));
+}
+.town-preview { flex: 0 0 auto; width: 62px; height: 62px; }
+.town-preview img { width: 100%; height: 100%; object-fit: contain; }
+.town-info { flex: 1 1 auto; min-width: 0; text-align: left; }
+
+.town-head { display: flex; align-items: center; gap: 8px; }
+.town-card h3 { font-size: 24px !important; margin: 0 !important; }
+.town-card p {
+  font-size: 15px !important; line-height: 1.28 !important;
+  margin: 2px 0 4px !important; text-align: left !important;
+  color: #5f4a30;
+}
+
+/* Difficulty chip — sets expectations before the player commits. */
+.town-diff {
+  font-size: 11px; font-weight: 900; letter-spacing: 0.8px;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  border: 2px solid #fffdf6;
+}
+.town-diff.hard { background: linear-gradient(180deg,#f08a7a,#c0392b); color: #fff; }
+.town-diff.mid  { background: linear-gradient(180deg,#ffd75f,#e08a1e); color: #4a2f08; }
+.town-diff.easy { background: linear-gradient(180deg,#9fe0a8,#3d8b4d); color: #fff; }
+
+/* The hazard line: the single most useful fact for choosing. */
+.town-hazard {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 800; color: #6b4a18;
+  background: rgba(245,158,11,0.16);
+  border: 1px solid rgba(180,120,40,0.4);
+  border-radius: 999px; padding: 3px 9px; margin-bottom: 6px;
+}
+.town-hazard .th-ico { font-size: 14px; }
+
+.select-town-btn {
+  min-height: 38px !important;
+  padding: 5px 20px !important;
+  font-size: 16px !important;
+  border-radius: calc(11 * var(--u)) !important;
+}
+/* Selected town: unmistakable, not just a slightly warmer border. */
+.town-card.selected {
+  box-shadow: 0 0 0 calc(4 * var(--u)) rgba(245,158,11,0.9),
+              0 calc(5 * var(--u)) calc(12 * var(--u)) rgba(0,0,0,0.35) !important;
+}
+
+
+/* ================================================================
+   SHARED CARD LANGUAGE
+   ----------------------------------------------------------------
+   The four setup screens had drifted into three different looks:
+   the objective used a recessed brief box, the town list used flat
+   tiles, the name card used none of it. One vocabulary now applies
+   to all of them so the flow feels like one product.
+   ================================================================ */
+
+/* Body copy: one size, one colour, one measure across every card. */
+#objectiveCard p, #nameCard p, #townCard .town-intro, #infoCard .town-history {
+  color: #4a3418;
+  line-height: 1.34;
+}
+
+/* Section headings share the small-caps rule used by the sound panel. */
+#infoCard .tool-guide-head {
+  font-size: 14px !important;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  opacity: 0.62;
+  color: #4a3418 !important;
+  text-align: left;
+  margin-bottom: 5px;
+}
+
+/* Recessed inner panels, matching the objective's brief box. */
+#nameCard .name-field-wrap, #townCard .town-card, #infoCard .tg-card,
+#infoCard .town-objective .obj-chip {
+  box-shadow: inset 0 calc(2 * var(--u)) calc(5 * var(--u)) rgba(120,90,40,0.1),
+              0 calc(2 * var(--u)) 0 rgba(255,255,255,0.65);
+}
+
+/* ---- Name field ----
+   It was a plain box with a heavy dark outline that read as an error
+   state. Softer, recessed, and it lights amber on focus instead. */
+#playerNameInput {
+  border: calc(3 * var(--u)) solid rgba(163,122,66,0.5) !important;
+  background: linear-gradient(180deg, #fffdf6, #f6ecd6) !important;
+  box-shadow: inset 0 calc(3 * var(--u)) calc(6 * var(--u)) rgba(120,90,40,0.14) !important;
+  transition: border-color .18s, box-shadow .18s;
+}
+#playerNameInput:focus {
+  border-color: #f2861d !important;
+  box-shadow: inset 0 calc(2 * var(--u)) calc(5 * var(--u)) rgba(120,90,40,0.12),
+              0 0 0 calc(4 * var(--u)) rgba(242,134,29,0.28) !important;
+  outline: none !important;
+}
+/* The hint is guidance by default and only turns into a warning once
+   the player has actually tried to continue (see validateNameInput). */
+#nameHint { font-size: 15px; font-weight: 800; color: #7a5a28; }
+#nameHint.warn { color: #a3301c; }
+
+
+/* ================================================================
+   TOWN CARDS — transparent hazard line, tighter rows
+   ----------------------------------------------------------------
+   The hazard line sat on a filled amber pill, which put a solid
+   yellow block behind the one piece of text a player most needs to
+   read, and made three stacked cards look heavy. The fill is gone:
+   the line now reads directly on the card with a warm accent rule
+   at its left edge, so the colour still marks it as the hazard
+   without shouting over the words.
+   ================================================================ */
+.town-hazard {
+  background: none !important;
+  border: none !important;
+  border-left: calc(4 * var(--u)) solid rgba(217, 119, 6, 0.85) !important;
+  border-radius: 0 !important;
+  padding: 1px 0 1px calc(8 * var(--u)) !important;
+  margin: 3px 0 5px !important;
+  color: #8a5a12 !important;
+  font-size: 13px !important;
+  line-height: 1.25 !important;
+}
+.town-hazard .th-ico { font-size: 14px; }
+
+/* Compact rows: the whole list has to sit on one screen alongside the
+   heading and the Back/Next pair. */
+.town-card { padding: calc(7 * var(--u)) calc(10 * var(--u)) !important; }
+.town-card p {
+  font-size: 14px !important;
+  margin: 1px 0 2px !important;
+  line-height: 1.24 !important;
+}
+.town-card h3 { font-size: 22px !important; }
+.town-preview { width: 54px; height: 54px; }
+.select-town-btn { min-height: 34px !important; padding: 4px 18px !important; font-size: 15px !important; }
+#townList { gap: 8px !important; }
+
+
+/* Drawn hazard icons replace the system emoji: a font-independent SVG looks
+   the same on every kiosk, stays sharp at any scale, and carries the game's
+   own outline weight and palette instead of whichever emoji set the OS
+   happens to ship. */
+svg.th-ico {
+  /* 17px read as a smudge at kiosk distance; 20 keeps the shapes legible
+     without pushing the row taller, since the line is 1.25em anyway. */
+  width: 20px; height: 20px;
+  flex: 0 0 auto;
+  display: block;
+}
+.town-hazard { display: flex; align-items: center; gap: 7px; }
+
+
+/* ================================================================
+   DRAWN UI ICONS
+   ----------------------------------------------------------------
+   Inline SVG replaces the emoji that used to sit in titles, buttons
+   and the sound panel. Emoji are drawn by whatever font the OS
+   ships, so the same screen looked different on Windows 10, 11 and
+   Android — and anything newer than Unicode 12 rendered as an empty
+   box on older Windows 10 builds. These are part of the page, so
+   they are identical everywhere and stay sharp at any DPI.
+   ================================================================ */
+svg.ui-ico {
+  width: 1.05em; height: 1.05em;
+  vertical-align: -0.16em;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+/* Inside the round chips of the sound panel they fill the chip instead. */
+.ss-chip svg.ui-ico { width: 15px; height: 15px; vertical-align: middle; }
+/* Card titles carry a slightly larger mark. */
+h1 svg.ui-ico { width: 1.1em; height: 1.1em; vertical-align: -0.18em; margin-right: 2px; }
+/* Buttons: keep the icon from crowding the label. */
+#overlay button svg.ui-ico { margin-right: 6px; }
+
+
+/* Rank tints for the drawn medal: gold, silver, bronze. One shape recoloured
+   beats three emoji that each render at a different size and style. */
+svg.ui-ico.rank-1 circle { fill: #ffd25e; }
+svg.ui-ico.rank-1 circle + path,
+svg.ui-ico.rank-1 circle:last-of-type { fill: #f0b32e; }
+svg.ui-ico.rank-2 circle { fill: #dfe3e8; }
+svg.ui-ico.rank-2 circle:last-of-type { fill: #b9c0c9; }
+svg.ui-ico.rank-3 circle { fill: #e2a273; }
+svg.ui-ico.rank-3 circle:last-of-type { fill: #c07b45; }
+.lb-rank svg.ui-ico { width: 30px; height: 30px; vertical-align: -0.3em; }
+#lbBanner svg.ui-ico { width: 1.1em; height: 1.1em; vertical-align: -0.18em; margin-right: 4px; }
+#endTitle svg.ui-ico { width: 1.05em; height: 1.05em; vertical-align: -0.16em; margin-right: 4px; }

@@ -1,0 +1,1362 @@
+/* =========================================================
+APV PAGE
+MT. PINATUBO MUSEUM STORIES
+========================================================= */
+
+/* =========================================================
+CORE CONTAINER
+========================================================= */
+
+.apv-container {
+
+position: relative;
+
+display: flex;
+flex-direction: column;
+align-items: center;
+
+width: 1080px;
+min-height: 1920px;
+
+margin: 0 auto;
+
+padding: 8rem 0 6rem;
+
+box-sizing: border-box;
+
+overflow: hidden;
+
+color: #ffffff;
+
+}
+
+/* =========================================================
+BACKGROUND
+========================================================= */
+
+.apv-container::before {
+
+content: "";
+
+position: fixed;
+
+inset: 0;
+
+width: 100vw;
+height: 100vh;
+
+background:
+linear-gradient(
+rgba(15, 23, 36, 0.38),
+rgba(15, 23, 36, 0.38)
+),
+url('/assets/images/ptstories-bg.png')
+no-repeat center center / cover;
+
+filter:
+grayscale(80%)
+contrast(1.12);
+
+z-index: -3;
+
+}
+
+.apv-container::after {
+
+content: "";
+
+position: fixed;
+
+inset: 0;
+
+width: 100vw;
+height: 100vh;
+
+background:
+
+
+linear-gradient(
+  180deg,
+  rgba(5, 9, 14, 0.25) 0%,
+  rgba(8, 13, 19, 0.55) 48%,
+  rgba(5, 8, 12, 0.92) 100%
+);
+
+
+z-index: -2;
+
+}
+
+/* =========================================================
+NAVIGATION
+========================================================= */
+
+.nav-bar {
+
+position: fixed;
+
+top: 0;
+left: 0;
+
+width: 100%;
+
+z-index: 100;
+
+}
+
+.nav-container {
+
+width: 100%;
+
+box-sizing: border-box;
+
+}
+
+.nav-logo img {
+
+width: 145px;
+
+height: auto;
+
+filter:
+drop-shadow(0 5px 12px rgba(0,0,0,0.8));
+
+}
+
+.back-button {
+
+width: 78px;
+height: 78px;
+
+display: flex;
+
+align-items: center;
+justify-content: center;
+
+color: #D5A822;
+
+font-size: 4.3rem;
+
+transition:
+transform 0.2s ease,
+color 0.2s ease,
+filter 0.2s ease;
+
+}
+
+.back-button:hover {
+
+color: #FFE29A;
+
+transform: translateX(-5px);
+
+filter:
+drop-shadow(
+0 0 12px
+rgba(213,168,34,0.5)
+);
+
+}
+
+.back-button:active {
+
+transform: scale(0.92);
+
+}
+
+/* =========================================================
+HERO
+========================================================= */
+
+.apv-hero {
+
+width: 900px;
+
+display: flex;
+
+flex-direction: column;
+
+align-items: center;
+
+text-align: center;
+
+margin-top: 2rem;
+
+margin-bottom: 5rem;
+
+}
+
+.hero-eyebrow {
+
+font-family: "Kinetika Regular", sans-serif;
+
+font-size: 1rem;
+
+font-weight: 700;
+
+letter-spacing: 5px;
+
+color: #DFBA73;
+
+margin-bottom: 1.4rem;
+
+text-shadow:
+0 3px 8px rgba(0,0,0,0.8);
+
+}
+
+/* Big display title, matching the video page's PINATUBO treatment:
+   plain Cinzel (no Decorative), bold, gold. */
+.hero-title {
+
+margin: 0;
+
+font-family: "Cinzel", serif;
+
+font-size: 4.2rem;
+
+line-height: 1.15;
+
+font-weight: 700;
+
+letter-spacing: 3px;
+
+color: #DFBA73;
+
+text-shadow:
+0 8px 22px rgba(0,0,0,0.95),
+0 3px 7px rgba(0,0,0,0.8);
+
+}
+
+/* Boxed subtitle, matching the video page's boxed "STORIES OF LOSS &
+   SURVIVAL" treatment. */
+.hero-subtitle-box {
+
+margin-top: 1.8rem;
+
+padding: 0.7rem 2.5rem;
+
+border: 2px solid #DFBA73;
+
+border-radius: 4px;
+
+background: rgba(0, 0, 0, 0.25);
+
+backdrop-filter: blur(4px);
+-webkit-backdrop-filter: blur(4px);
+
+box-shadow:
+0 4px 14px rgba(0, 0, 0, 0.5);
+
+}
+
+.hero-subtitle-box span {
+
+font-family: "Cinzel", serif;
+
+font-weight: 600;
+
+font-size: 1.3rem;
+
+letter-spacing: 4px;
+
+text-transform: uppercase;
+
+color: #F1E4C9;
+
+text-shadow:
+0 2px 6px rgba(0, 0, 0, 0.8);
+
+white-space: nowrap;
+
+}
+
+.hero-divider {
+
+width: 520px;
+
+height: 2px;
+
+margin: 2rem 0 1.3rem;
+
+background:
+linear-gradient(
+90deg,
+transparent,
+#DFBA73,
+transparent
+);
+
+box-shadow:
+0 0 12px
+rgba(223,186,115,0.25);
+
+}
+
+.hero-introduction {
+
+width: 700px;
+
+margin: 1.5rem 0 0;
+
+font-family: "Kinetika Regular", sans-serif;
+
+font-size: 1.15rem;
+
+line-height: 1.8;
+
+color: rgba(255,255,255,0.72);
+
+text-shadow:
+0 3px 7px rgba(0,0,0,0.8);
+
+}
+
+/* =========================================================
+CONTENT
+========================================================= */
+
+.avp-content {
+
+width: 920px;
+
+display: flex;
+
+flex-direction: column;
+
+}
+
+/* =========================================================
+SECTION HEADING
+========================================================= */
+
+.section-heading {
+
+width: 100%;
+
+display: flex;
+
+align-items: center;
+
+gap: 1.5rem;
+
+margin-bottom: 2.5rem;
+
+}
+
+.section-number {
+
+font-family: "Cinzel", serif;
+
+font-size: 1.2rem;
+
+color: #DFBA73;
+
+font-weight: 700;
+
+}
+
+.section-title-group {
+
+display: flex;
+
+flex-direction: column;
+
+gap: 0.2rem;
+
+}
+
+.section-label {
+
+font-family: "Kinetika Regular", sans-serif;
+
+font-size: 0.8rem;
+
+font-weight: 700;
+
+letter-spacing: 3px;
+
+color: rgba(255,255,255,0.48);
+
+}
+
+.section-title-group h2 {
+
+margin: 0;
+
+font-family: "Cinzel", serif;
+
+font-size: 1.9rem;
+
+font-weight: 600;
+
+letter-spacing: 1px;
+
+}
+
+.section-rule {
+
+flex: 1;
+
+height: 1px;
+
+margin-left: 1rem;
+
+background:
+linear-gradient(
+90deg,
+rgba(223,186,115,0.5),
+transparent
+);
+
+}
+
+/* =========================================================
+AVP GRID
+========================================================= */
+
+.avp-grid {
+
+display: grid;
+
+grid-template-columns:
+repeat(2, 1fr);
+
+gap: 2.8rem;
+
+width: 100%;
+
+}
+
+/* =========================================================
+AVP CARD
+========================================================= */
+
+.avp-card {
+
+position: relative;
+
+display: flex;
+
+flex-direction: column;
+
+min-height: 470px;
+
+background:
+rgba(8, 13, 19, 0.72);
+
+border:
+1px solid
+rgba(255,255,255,0.12);
+
+border-radius: 14px;
+
+overflow: hidden;
+
+cursor: pointer;
+
+backdrop-filter: blur(12px);
+
+-webkit-backdrop-filter: blur(12px);
+
+box-shadow:
+0 20px 45px rgba(0,0,0,0.5);
+
+transition:
+transform 0.3s ease,
+border-color 0.3s ease,
+box-shadow 0.3s ease;
+
+}
+
+.avp-card:hover {
+
+transform: translateY(-8px);
+
+border-color:
+rgba(223,186,115,0.65);
+
+box-shadow:
+0 30px 65px rgba(0,0,0,0.7),
+0 0 25px rgba(223,186,115,0.08);
+
+}
+
+.avp-card:active {
+
+transform:
+translateY(-2px)
+scale(0.985);
+
+}
+
+/* =========================================================
+IMAGE / VIDEO THUMBNAIL
+========================================================= */
+
+.avp-image {
+
+position: relative;
+
+width: 100%;
+
+height: 285px;
+
+overflow: hidden;
+
+background: #080b0f;
+
+}
+
+.avp-image img {
+
+width: 100%;
+height: 100%;
+
+object-fit: cover;
+
+transition:
+transform 0.6s
+cubic-bezier(0.2,0.8,0.2,1),
+filter 0.4s ease;
+
+}
+
+.avp-card:hover
+.avp-image img {
+
+transform: scale(1.07);
+
+filter: brightness(0.75);
+
+}
+
+/* Image Overlay */
+
+.image-overlay {
+
+position: absolute;
+
+inset: 0;
+
+background:
+
+
+linear-gradient(
+  180deg,
+  rgba(0,0,0,0.45) 0%,
+  transparent 35%,
+  rgba(0,0,0,0.65) 100%
+);
+
+
+pointer-events: none;
+
+}
+
+/* =========================================================
+NUMBER
+========================================================= */
+
+.avp-number {
+
+position: absolute;
+
+top: 18px;
+left: 20px;
+
+font-family: "Cinzel", serif;
+
+font-size: 1.1rem;
+
+font-weight: 700;
+
+color: #ffffff;
+
+text-shadow:
+0 3px 8px rgba(0,0,0,0.9);
+
+}
+
+/* =========================================================
+DURATION
+========================================================= */
+
+.duration-tag {
+
+position: absolute;
+
+top: 18px;
+right: 18px;
+
+padding:
+7px 12px;
+
+border-radius: 4px;
+
+background:
+rgba(0,0,0,0.62);
+
+border:
+1px solid
+rgba(255,255,255,0.16);
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.78rem;
+
+font-weight: 600;
+
+letter-spacing: 1px;
+
+color: #ffffff;
+
+backdrop-filter: blur(8px);
+
+}
+
+/* =========================================================
+PLAY BUTTON
+========================================================= */
+
+.play-button {
+
+position: absolute;
+
+top: 50%;
+left: 50%;
+
+width: 82px;
+height: 82px;
+
+display: flex;
+
+align-items: center;
+justify-content: center;
+
+transform:
+translate(-50%, -50%);
+
+border-radius: 50%;
+
+background:
+rgba(223,186,115,0.93);
+
+box-shadow:
+0 10px 30px rgba(0,0,0,0.6),
+0 0 0 8px rgba(223,186,115,0.12);
+
+transition:
+transform 0.25s ease,
+box-shadow 0.25s ease,
+background 0.25s ease;
+
+}
+
+.avp-card:hover
+.play-button {
+
+transform:
+translate(-50%, -50%)
+scale(1.12);
+
+background: #F0CB82;
+
+box-shadow:
+0 12px 35px rgba(0,0,0,0.65),
+0 0 0 12px rgba(223,186,115,0.12);
+
+}
+
+.play-icon {
+
+width: 0;
+height: 0;
+
+margin-left: 5px;
+
+border-top:
+13px solid transparent;
+
+border-bottom:
+13px solid transparent;
+
+border-left:
+20px solid #15191e;
+
+}
+
+/* =========================================================
+CARD INFORMATION
+========================================================= */
+
+.avp-info {
+
+display: flex;
+
+flex-direction: column;
+
+padding:
+1.7rem 1.8rem 1.8rem;
+
+flex: 1;
+
+}
+
+.avp-category {
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.72rem;
+
+font-weight: 700;
+
+letter-spacing: 2px;
+
+color: #DFBA73;
+
+margin-bottom: 0.8rem;
+
+}
+
+.avp-info h3 {
+
+margin: 0;
+
+font-family:
+"Cinzel",
+serif;
+
+font-size: 1.65rem;
+
+line-height: 1.3;
+
+font-weight: 600;
+
+color: #ffffff;
+
+transition:
+color 0.2s ease;
+
+}
+
+.avp-card:hover
+.avp-info h3 {
+
+color: #FFE0A3;
+
+}
+
+.avp-info p {
+
+margin:
+0.8rem 0 1.4rem;
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.95rem;
+
+line-height: 1.6;
+
+color:
+rgba(255,255,255,0.62);
+
+}
+
+/* =========================================================
+WATCH INDICATOR
+========================================================= */
+
+.watch-indicator {
+
+display: flex;
+
+align-items: center;
+
+gap: 12px;
+
+margin-top: auto;
+
+padding-top: 1.1rem;
+
+border-top:
+1px solid
+rgba(255,255,255,0.08);
+
+}
+
+.watch-indicator span {
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.78rem;
+
+font-weight: 700;
+
+letter-spacing: 2px;
+
+color:
+rgba(255,255,255,0.65);
+
+transition:
+color 0.2s ease;
+
+}
+
+.watch-indicator i {
+
+color: #DFBA73;
+
+transition:
+transform 0.2s ease;
+
+}
+
+.avp-card:hover
+.watch-indicator span {
+
+color: #ffffff;
+
+}
+
+.avp-card:hover
+.watch-indicator i {
+
+transform: translateX(6px);
+
+}
+
+/* =========================================================
+ARCHIVE FOOTER
+========================================================= */
+
+.archive-footer {
+
+width: 850px;
+
+display: flex;
+
+flex-direction: column;
+
+align-items: center;
+
+gap: 1.8rem;
+
+margin-top: 7rem;
+
+text-align: center;
+
+}
+
+.footer-line {
+
+width: 100%;
+
+height: 1px;
+
+background:
+linear-gradient(
+90deg,
+transparent,
+rgba(223,186,115,0.55),
+transparent
+);
+
+}
+
+.archive-footer p {
+
+margin: 0;
+
+font-family:
+"Cinzel",
+serif;
+
+font-size: 0.95rem;
+
+letter-spacing: 4px;
+
+line-height: 1.8;
+
+color:
+rgba(255,255,255,0.55);
+
+}
+
+.archive-footer p span {
+
+color: #DFBA73;
+
+}
+
+/* =========================================================
+VIDEO MODAL
+========================================================= */
+
+.video-modal {
+
+position: fixed;
+
+inset: 0;
+
+width: 100vw;
+height: 100vh;
+
+display: flex;
+
+align-items: center;
+justify-content: center;
+
+background:
+rgba(3,6,10,0.94);
+
+backdrop-filter:
+blur(16px);
+
+-webkit-backdrop-filter:
+blur(16px);
+
+z-index: 1000;
+
+animation:
+fadeInModal 0.25s ease-out;
+
+}
+
+/* =========================================================
+MODAL BOX
+========================================================= */
+
+.modal-box {
+
+position: relative;
+
+width: 850px;
+
+max-width: 90vw;
+
+max-height: 90vh;
+
+display: flex;
+
+flex-direction: column;
+
+background:
+linear-gradient(
+145deg,
+rgba(17,23,31,0.98),
+rgba(8,12,17,0.98)
+);
+
+border:
+1px solid
+rgba(223,186,115,0.35);
+
+border-radius: 18px;
+
+padding: 2rem;
+
+box-shadow:
+0 50px 120px rgba(0,0,0,0.9),
+0 0 50px rgba(223,186,115,0.05);
+
+}
+
+/* =========================================================
+MODAL HEADER
+========================================================= */
+
+.modal-header {
+
+display: flex;
+
+align-items: flex-start;
+
+justify-content: space-between;
+
+gap: 2rem;
+
+margin-bottom: 1.4rem;
+
+}
+
+.modal-heading {
+
+display: flex;
+
+flex-direction: column;
+
+}
+
+.modal-label {
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.75rem;
+
+font-weight: 700;
+
+letter-spacing: 3px;
+
+color: #DFBA73;
+
+margin-bottom: 0.5rem;
+
+}
+
+.modal-heading h2 {
+
+margin: 0;
+
+font-family:
+"Cinzel",
+serif;
+
+font-size: 2rem;
+
+font-weight: 600;
+
+color: #ffffff;
+
+}
+
+/* =========================================================
+CLOSE BUTTON
+========================================================= */
+
+.close-modal-btn {
+
+position: relative;
+
+flex-shrink: 0;
+
+width: 52px;
+height: 52px;
+
+border-radius: 50%;
+
+border:
+1px solid
+rgba(255,255,255,0.18);
+
+background:
+rgba(255,255,255,0.05);
+
+cursor: pointer;
+
+transition:
+background 0.2s ease,
+transform 0.2s ease,
+border-color 0.2s ease;
+
+}
+
+.close-modal-btn:hover {
+
+background:
+rgba(223,186,115,0.16);
+
+border-color:
+rgba(223,186,115,0.5);
+
+transform: rotate(90deg);
+
+}
+
+.close-modal-btn span {
+
+position: absolute;
+
+width: 20px;
+height: 1.5px;
+
+left: 15px;
+top: 25px;
+
+background: #ffffff;
+
+}
+
+.close-modal-btn span:first-child {
+
+transform: rotate(45deg);
+
+}
+
+.close-modal-btn span:last-child {
+
+transform: rotate(-45deg);
+
+}
+
+/* =========================================================
+PLAYER
+========================================================= */
+
+.player-surface {
+
+width: 100%;
+
+aspect-ratio: 16 / 9;
+
+background: #000000;
+
+border-radius: 10px;
+
+overflow: hidden;
+
+box-shadow:
+inset 0 0 40px rgba(0,0,0,0.9);
+
+}
+
+.player-surface video {
+
+width: 100%;
+height: 100%;
+
+object-fit: contain;
+
+}
+
+/* =========================================================
+VIDEO UNAVAILABLE
+========================================================= */
+
+.video-unavailable {
+
+width: 100%;
+height: 100%;
+
+display: flex;
+
+flex-direction: column;
+
+align-items: center;
+justify-content: center;
+
+text-align: center;
+
+color:
+rgba(255,255,255,0.65);
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 1rem;
+
+}
+
+.unavailable-icon {
+
+width: 52px;
+height: 52px;
+
+display: flex;
+
+align-items: center;
+justify-content: center;
+
+border-radius: 50%;
+
+border:
+2px solid
+#DFBA73;
+
+color: #DFBA73;
+
+font-family:
+"Cinzel",
+serif;
+
+font-size: 1.5rem;
+
+margin-bottom: 1rem;
+
+}
+
+/* =========================================================
+MODAL DESCRIPTION
+========================================================= */
+
+.modal-description {
+
+padding-top: 1.5rem;
+
+}
+
+.modal-description span {
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.7rem;
+
+font-weight: 700;
+
+letter-spacing: 2px;
+
+color: #DFBA73;
+
+}
+
+.modal-description p {
+
+margin:
+0.5rem 0 0;
+
+font-family:
+"Kinetika Regular",
+sans-serif;
+
+font-size: 0.95rem;
+
+line-height: 1.6;
+
+color:
+rgba(255,255,255,0.62);
+
+}
+
+/* =========================================================
+ANIMATION
+========================================================= */
+
+@keyframes fadeInModal {
+
+from {
+
+opacity: 0;
+
+transform:
+  scale(0.98);
+
+
+}
+
+to {
+
+
+opacity: 1;
+
+transform:
+  scale(1);
+
+
+}
+
+}
+
+/* =========================================================
+RESPONSIVE
+========================================================= */
+
+@media (max-width: 1080px) {
+
+.apv-container {
+
+
+width: 100%;
+
+
+}
+
+}
+
+@media (max-width: 800px) {
+
+.apv-content {
+
+
+width: 90%;
+
+
+}
+
+.apv-hero {
+
+
+width: 90%;
+
+
+}
+
+.hero-title {
+
+
+font-size: 3rem;
+
+
+}
+
+.hero-introduction {
+
+
+width: 90%;
+
+
+}
+
+.avp-grid {
+
+grid-template-columns: 1fr;
+
+
+}
+
+.archive-footer {
+
+
+width: 80%;
+
+}
+
+}
+
+@media (max-width: 500px) {
+
+.hero-title {
+
+
+font-size: 2.2rem;
+
+
+}
+
+.hero-subtitle-box span {
+
+font-size: 1rem;
+
+letter-spacing: 2px;
+
+}
+
+.hero-divider {
+
+
+width: 80%;
+
+
+}
+
+.avp-info h3 {
+
+
+font-size: 1.35rem;
+
+}
+
+}

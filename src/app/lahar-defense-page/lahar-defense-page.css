@@ -1,0 +1,712 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LAHARAYA — Kiosk Welcome Screen
+   The screen is just the logo and the start button, sitting in front of
+   a living Pinatubo night: drifting ash, rising embers, a breathing
+   caldera glow, parallax ridges and the occasional distant lightning.
+   Every animation runs on transform/opacity only, so the whole scene
+   stays on the compositor and leaves the CPU free for the game.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Base page & host wrappers ─── */
+.page-wrap { background: #020611; user-select: none; -webkit-user-select: none; }
+.game-host { position: relative; overflow: hidden; }
+.game-frame { display: block; }
+
+/* ─── Sky ─── */
+.welcome-overlay {
+  background:
+    radial-gradient(ellipse 130% 80% at 50% 108%, rgba(251, 146, 60, 0.20) 0%, rgba(217, 70, 30, 0.10) 35%, transparent 68%),
+    radial-gradient(ellipse 120% 75% at 50% -12%, #16233a 0%, #0b1322 48%, #04080f 100%),
+    #04080f;
+  color: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  box-sizing: border-box;
+  isolation: isolate;
+}
+/* Cinematic edge vignette, above the scenery but below the content */
+.welcome-overlay::after {
+  content: '';
+  position: absolute; inset: 0;
+  z-index: 2; pointer-events: none;
+  box-shadow: inset 0 0 200px 40px rgba(0, 0, 0, 0.42);
+}
+
+/* Shared setup for every decorative layer */
+.sky-stars, .sky-aurora, .storm-flash, .ridge,
+.volcano, .mist-band, .rain, .ash, .embers {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Starfield: a handful of points that breathe in and out ─── */
+.sky-stars {
+  inset: 0;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 14%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1.4px 1.4px at 27% 8%,  rgba(210,232,255,0.75), transparent),
+    radial-gradient(1.8px 1.8px at 41% 19%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1.2px 1.2px at 58% 6%,  rgba(255,255,255,0.85), transparent),
+    radial-gradient(1.6px 1.6px at 71% 16%, rgba(200,225,255,0.7), transparent),
+    radial-gradient(1.3px 1.3px at 84% 10%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.7px 1.7px at 92% 22%, rgba(225,240,255,0.65), transparent),
+    radial-gradient(1.2px 1.2px at 19% 27%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1.5px 1.5px at 64% 29%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1.3px 1.3px at 35% 33%, rgba(220,238,255,0.5), transparent);
+  animation: starTwinkle 6.5s ease-in-out infinite alternate;
+  opacity: 0.9;
+}
+@keyframes starTwinkle { from { opacity: 0.45; } to { opacity: 1; } }
+
+/* ─── Volcanic aurora: the warm glow the eruption throws onto the sky ─── */
+.sky-aurora {
+  inset: -10% -20% 30%;
+  background:
+    radial-gradient(ellipse 55% 42% at 50% 82%, rgba(249, 115, 22, 0.34) 0%, rgba(220, 38, 38, 0.14) 45%, transparent 72%),
+    radial-gradient(ellipse 80% 30% at 30% 70%, rgba(56, 189, 248, 0.10) 0%, transparent 70%);
+  filter: blur(24px);
+  animation: auroraBreath 9s ease-in-out infinite alternate;
+}
+@keyframes auroraBreath {
+  from { opacity: 0.55; transform: translateY(6px) scale(1); }
+  to   { opacity: 1;    transform: translateY(-8px) scale(1.06); }
+}
+
+/* ─── Distant lightning: two quick strikes, then a long wait ─── */
+.storm-flash {
+  inset: 0;
+  background: linear-gradient(180deg, rgba(226, 240, 255, 0.5) 0%, rgba(170, 205, 255, 0.16) 35%, transparent 65%);
+  opacity: 0;
+  animation: stormFlash 19s linear infinite;
+}
+@keyframes stormFlash {
+  0%, 4.6%   { opacity: 0; }
+  4.8%       { opacity: 0.85; }
+  5.2%       { opacity: 0.08; }
+  5.5%       { opacity: 0.6; }
+  6.4%       { opacity: 0; }
+  100%       { opacity: 0; }
+}
+
+/* ─── Scenery ───
+   A hazy far range, then Mt. Pinatubo as a broad truncated cone with the
+   caldera burning at its summit, then a dark foreground ridge. Nearer
+   layers are darker and drift further, which is what sells the depth. */
+.ridge, .volcano {
+  left: -14%; width: 128%; bottom: 0;
+  background-repeat: no-repeat;
+}
+.ridge-far {
+  height: 22%;
+  background: linear-gradient(180deg, #33456b 0%, #1b2740 100%);
+  clip-path: polygon(0% 100%, 0% 74%, 6% 66%, 12% 72%, 19% 58%, 26% 69%, 33% 61%,
+                     40% 70%, 48% 55%, 56% 68%, 63% 60%, 71% 71%, 78% 63%,
+                     86% 72%, 93% 66%, 100% 73%, 100% 100%);
+  opacity: 0.75;
+  filter: blur(1.5px);
+  animation: ridgeDriftA 96s ease-in-out infinite alternate;
+}
+.ridge-near {
+  height: 13%;
+  background: linear-gradient(180deg, #050a14 0%, #01030880 100%);
+  clip-path: polygon(0% 100%, 0% 62%, 9% 74%, 18% 55%, 28% 70%, 38% 50%, 48% 66%,
+                     58% 48%, 68% 64%, 78% 52%, 88% 68%, 100% 56%, 100% 100%);
+  animation: ridgeDriftA 46s ease-in-out infinite alternate-reverse;
+}
+@keyframes ridgeDriftA { from { transform: translateX(-1.2%); } to { transform: translateX(1.2%); } }
+
+/* ── The mountain ──
+   Geometry lives in the inline SVG (see the template); this only handles
+   sizing and the animated light. The summit caldera sits at y=136 of the
+   420-unit viewBox, i.e. 67.6% up from the bottom of this box — every
+   glow/plume offset below is derived from that. */
+.volcano { height: 23%; left: -26%; width: 152%; }
+.volcano-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Warm light on the lit flank breathes with the caldera */
+.massif-lit { animation: flankGlow 4.4s ease-in-out infinite alternate; }
+@keyframes flankGlow { from { opacity: 0.45; } to { opacity: 1; } }
+/* Erosion gullies catch a little of that light too */
+.gullies { animation: gullyGlow 5.6s ease-in-out infinite alternate; }
+@keyframes gullyGlow { from { opacity: 0.5; } to { opacity: 0.95; } }
+/* The crest rim-light shimmers gently */
+.rim-light { animation: rimShimmer 6.2s ease-in-out infinite alternate; }
+@keyframes rimShimmer { from { opacity: 0.55; } to { opacity: 1; } }
+
+/* Incandescent caldera, sitting in the summit bowl */
+.caldera-glow {
+  position: absolute; left: 50%; bottom: 65%;
+  width: 172px; height: 52px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 68%,
+    rgba(255, 228, 165, 0.98) 0%, rgba(251, 146, 60, 0.66) 26%,
+    rgba(217, 45, 32, 0.30) 54%, transparent 78%);
+  filter: blur(9px);
+  animation: calderaBreath 4.4s ease-in-out infinite alternate;
+}
+@keyframes calderaBreath {
+  from { opacity: 0.6; transform: translateX(-50%) scale(0.92); }
+  to   { opacity: 1;   transform: translateX(-50%) scale(1.12); }
+}
+
+/* Ash plume rising out of the caldera */
+.plume {
+  position: absolute; left: 50%; bottom: 69%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 42% 42%, rgba(148, 163, 184, 0.34), rgba(71, 85, 105, 0.16) 60%, transparent 76%);
+  filter: blur(10px);
+  opacity: 0;
+  animation: plumeRise 12s ease-out infinite;
+}
+.plume-1 { width: 96px;  height: 68px;  animation-delay: 0s; }
+.plume-2 { width: 128px; height: 90px;  animation-delay: 4s; }
+.plume-3 { width: 158px; height: 108px; animation-delay: 8s; }
+@keyframes plumeRise {
+  0%   { opacity: 0;    transform: translate(-50%, 0)      scale(0.5); }
+  18%  { opacity: 0.5; }
+  100% { opacity: 0;    transform: translate(-40%, -300px) scale(1.7); }
+}
+
+/* ─── Mist drifting along the valley floor ─── */
+.mist-band {
+  left: -25%; width: 150%; bottom: 9%; height: 15%;
+  background: linear-gradient(180deg, transparent 0%, rgba(203, 213, 225, 0.11) 48%, rgba(148, 163, 184, 0.06) 72%, transparent 100%);
+  filter: blur(16px);
+  animation: mistDrift 52s linear infinite;
+}
+@keyframes mistDrift {
+  from { transform: translateX(-7%); }
+  to   { transform: translateX(7%); }
+}
+
+/* ─── Weather particles ─── */
+.rain, .ash, .embers { inset: 0; overflow: hidden; }
+
+/* Fine monsoon drizzle, slanted */
+.rain span {
+  position: absolute; top: -12%;
+  width: 1.5px; height: 82px;
+  background: linear-gradient(180deg, transparent, rgba(186, 220, 255, 0.5));
+  animation: rainFall linear infinite;
+}
+@keyframes rainFall {
+  from { transform: translate3d(0, -20vh, 0) rotate(11deg); opacity: 0; }
+  12%  { opacity: 1; }
+  to   { transform: translate3d(-7vw, 120vh, 0) rotate(11deg); opacity: 0; }
+}
+.rain span:nth-child(1) { left: 8%;  animation-duration: 1.5s; animation-delay: 0s; }
+.rain span:nth-child(2) { left: 19%; animation-duration: 1.9s; animation-delay: .5s; }
+.rain span:nth-child(3) { left: 28%; animation-duration: 1.6s; animation-delay: .9s; }
+.rain span:nth-child(4) { left: 39%; animation-duration: 2.1s; animation-delay: .2s; }
+.rain span:nth-child(5) { left: 48%; animation-duration: 1.7s; animation-delay: 1.2s; }
+.rain span:nth-child(6) { left: 59%; animation-duration: 2s;   animation-delay: .7s; }
+.rain span:nth-child(7) { left: 68%; animation-duration: 1.6s; animation-delay: 1.5s; }
+.rain span:nth-child(8) { left: 78%; animation-duration: 1.9s; animation-delay: .35s; }
+.rain span:nth-child(9) { left: 87%; animation-duration: 2.2s; animation-delay: 1.1s; }
+.rain span:nth-child(10){ left: 95%; animation-duration: 1.7s; animation-delay: .8s; }
+
+/* Ash flakes: slow, tumbling, drifting sideways as they fall */
+.ash span {
+  position: absolute; top: -6%;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(203, 213, 225, 0.5);
+  animation: ashFall linear infinite;
+}
+@keyframes ashFall {
+  from { transform: translate3d(0, -10vh, 0) rotate(0deg);      opacity: 0; }
+  10%  { opacity: 0.75; }
+  90%  { opacity: 0.5; }
+  to   { transform: translate3d(9vw, 115vh, 0) rotate(360deg);  opacity: 0; }
+}
+.ash span:nth-child(1) { left: 4%;  animation-duration: 15s; animation-delay: 0s;   transform: scale(.7); }
+.ash span:nth-child(2) { left: 13%; animation-duration: 19s; animation-delay: 2.5s; }
+.ash span:nth-child(3) { left: 22%; animation-duration: 13s; animation-delay: 5s;   transform: scale(.6); }
+.ash span:nth-child(4) { left: 31%; animation-duration: 21s; animation-delay: 1.2s; }
+.ash span:nth-child(5) { left: 40%; animation-duration: 16s; animation-delay: 7s;   transform: scale(.85); }
+.ash span:nth-child(6) { left: 49%; animation-duration: 18s; animation-delay: 3.4s; }
+.ash span:nth-child(7) { left: 58%; animation-duration: 14s; animation-delay: 9s;   transform: scale(.65); }
+.ash span:nth-child(8) { left: 67%; animation-duration: 20s; animation-delay: 4.6s; }
+.ash span:nth-child(9) { left: 76%; animation-duration: 17s; animation-delay: 11s;  transform: scale(.75); }
+.ash span:nth-child(10){ left: 84%; animation-duration: 22s; animation-delay: 6.2s; }
+.ash span:nth-child(11){ left: 91%; animation-duration: 15s; animation-delay: 8.5s; transform: scale(.6); }
+.ash span:nth-child(12){ left: 97%; animation-duration: 19s; animation-delay: 13s; }
+
+/* Embers lifting off the caldera, flickering as they cool */
+.embers span {
+  position: absolute; bottom: 16%;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: #fdba74;
+  box-shadow: 0 0 8px 2px rgba(251, 146, 60, 0.8);
+  opacity: 0;
+  animation: emberRise ease-out infinite;
+}
+@keyframes emberRise {
+  0%   { opacity: 0;    transform: translate3d(0, 0, 0) scale(0.6); }
+  15%  { opacity: 1; }
+  70%  { opacity: 0.7; }
+  100% { opacity: 0;    transform: translate3d(var(--drift, 30px), -62vh, 0) scale(0.25); }
+}
+.embers span:nth-child(1) { left: 40%; --drift: -46px; animation-duration: 8s;  animation-delay: 0s; }
+.embers span:nth-child(2) { left: 45%; --drift: 34px;  animation-duration: 10s; animation-delay: 1.6s; }
+.embers span:nth-child(3) { left: 49%; --drift: -28px; animation-duration: 7.5s;animation-delay: 3.2s; }
+.embers span:nth-child(4) { left: 53%; --drift: 52px;  animation-duration: 11s; animation-delay: 4.8s; }
+.embers span:nth-child(5) { left: 57%; --drift: -38px; animation-duration: 9s;  animation-delay: 2.4s; }
+.embers span:nth-child(6) { left: 61%; --drift: 44px;  animation-duration: 12s; animation-delay: 6.1s; }
+.embers span:nth-child(7) { left: 44%; --drift: 60px;  animation-duration: 8.5s;animation-delay: 7.4s; }
+.embers span:nth-child(8) { left: 55%; --drift: -56px; animation-duration: 10.5s;animation-delay: 5.3s; }
+
+/* ═══ Foreground content ═══ */
+.welcome-content {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(34px, 6vh, 76px);
+  animation: welcomeRise 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes welcomeRise {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* ─── Logo ───
+   It floats on a slow cycle, sits in a warm halo that pulses with the
+   caldera, and catches a periodic specular sweep. */
+.logo-wrap {
+  position: relative;
+  display: inline-block;
+  animation: logoFloat 7s ease-in-out infinite alternate;
+}
+@keyframes logoFloat {
+  from { transform: translateY(-7px); }
+  to   { transform: translateY(7px); }
+}
+.logo-halo {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 128%; height: 150%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(251, 191, 36, 0.30) 0%, rgba(249, 115, 22, 0.16) 38%, transparent 70%);
+  filter: blur(26px);
+  pointer-events: none;
+  animation: haloPulse 4.4s ease-in-out infinite alternate;
+}
+@keyframes haloPulse {
+  from { opacity: 0.55; transform: translate(-50%, -50%) scale(0.94); }
+  to   { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+}
+.welcome-logo {
+  position: relative;
+  display: block;
+  width: min(72vw, 620px);
+  max-height: 50vh;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 44px rgba(0, 0, 0, 0.72))
+          drop-shadow(0 0 40px rgba(249, 115, 22, 0.28));
+  animation: logoFlare 6.4s ease-in-out infinite;
+}
+/* The sweep is masked by the logo image itself, so the highlight only ever
+   appears on the artwork's opaque pixels. The bar inside slides on a
+   transform rather than an animated background-position: it is smoother,
+   runs on the compositor, and — unlike the old version — is actually
+   strong enough to read against the warm halo behind the logo. */
+.logo-shine {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: url('/lahar-defense/assets/laharaya_logo.png');
+          mask-image: url('/lahar-defense/assets/laharaya_logo.png');
+  -webkit-mask-size: contain;      mask-size: contain;
+  -webkit-mask-position: center;   mask-position: center;
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+}
+.shine-bar {
+  position: absolute;
+  top: -60%; left: 0;
+  width: 19%; height: 240%;
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0)    0%,
+    rgba(255, 250, 232, 0.18) 22%,
+    rgba(255, 255, 255, 1)    50%,
+    rgba(255, 250, 232, 0.18) 78%,
+    rgba(255, 255, 255, 0)    100%);
+  filter: blur(3px);
+  mix-blend-mode: screen;
+  will-change: transform;
+  transform: rotate(20deg) translateX(-320%);
+  animation: shineSweep 6.4s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+}
+/* Long pause, then a quick pass — a glint, not a strobe. */
+@keyframes shineSweep {
+  0%, 62%   { transform: rotate(20deg) translateX(-460%); }
+  94%, 100% { transform: rotate(20deg) translateX(780%); }
+}
+
+/* A warm flare on the logo's own glow, timed with the glint so the whole
+   wordmark seems to catch the light from the caldera. */
+@keyframes logoFlare {
+  0%, 88%, 100% {
+    filter: drop-shadow(0 16px 44px rgba(0, 0, 0, 0.72))
+            drop-shadow(0 0 40px rgba(249, 115, 22, 0.28));
+  }
+  96% {
+    filter: drop-shadow(0 16px 44px rgba(0, 0, 0, 0.72))
+            drop-shadow(0 0 66px rgba(253, 186, 116, 0.5));
+  }
+}
+
+/* ─── Start button ─── */
+.start-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: none; background: transparent;
+  cursor: pointer; outline: none;
+  transform: rotate(-0.8deg);
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-ambient-glow {
+  position: absolute; inset: -18px;
+  border-radius: 999px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.55) 0%, rgba(217, 119, 6, 0.2) 55%, transparent 75%);
+  filter: blur(16px);
+  pointer-events: none;
+  animation: btnGlowBreath 3.2s ease-in-out infinite alternate;
+}
+.btn-ripple-halo {
+  position: absolute; inset: -8px;
+  border-radius: 999px;
+  border: 2px solid rgba(251, 191, 36, 0.6);
+  pointer-events: none;
+  animation: seismicRipple 2.6s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+.btn-inner-content {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  gap: 18px;
+  padding: 24px 84px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, #fef08a 0%, #f59e0b 50%, #d97706 100%);
+  color: #451a03;
+  box-shadow:
+    0 9px 0 #92400e,
+    0 18px 42px rgba(0, 0, 0, 0.55),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.85);
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0.1, 1), box-shadow 0.12s ease, filter 0.15s ease;
+}
+.start-btn:hover .btn-inner-content { filter: brightness(1.06); }
+.start-btn:hover .btn-arrow { transform: translateX(5px); }
+.start-btn:active .btn-inner-content {
+  transform: translateY(7px);
+  box-shadow: 0 2px 0 #92400e, 0 6px 18px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  filter: brightness(1.12);
+}
+.btn-icon { display: flex; align-items: center; justify-content: center; color: #fff8ea; }
+.btn-text {
+  font-family: 'Teko', 'Inter', sans-serif;
+  font-size: clamp(32px, 4.2vw, 44px);
+  font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  line-height: 1; color: #fff8ea;
+  text-shadow: 0 3px 0 rgba(58, 40, 28, 0.9);
+}
+.btn-arrow {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(26px, 3.4vw, 34px);
+  font-weight: 900; line-height: 1; color: #fff8ea;
+  transition: transform 0.2s ease;
+}
+@keyframes btnGlowBreath {
+  from { opacity: 0.6; transform: scale(0.96); }
+  to   { opacity: 1;   transform: scale(1.05); }
+}
+@keyframes seismicRipple {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* ─── Home button ─── */
+.home-btn {
+  position: absolute; top: 28px; left: 28px; z-index: 10;
+  width: 68px; height: 68px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fde68a; font-size: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease, transform 0.12s ease, border-color 0.15s ease, color 0.15s ease;
+  outline: none; -webkit-tap-highlight-color: transparent;
+}
+.home-btn:hover { background: rgba(30, 41, 59, 0.9); border-color: rgba(253, 230, 138, 0.4); color: #fef3c7; }
+.home-btn:active { transform: scale(0.94); }
+.home-btn .home-tooltip { font-size: 9px; font-weight: 800; letter-spacing: 1px; opacity: 0.75; }
+
+/* ─── Accessibility & small screens ─── */
+@media (prefers-reduced-motion: reduce) {
+  .sky-stars, .sky-aurora, .storm-flash, .ridge, .caldera-glow, .plume,
+  .massif-lit, .gullies, .rim-light,
+  .mist-band, .rain span, .ash span, .embers span,
+  .logo-wrap, .logo-halo, .logo-shine, .shine-bar, .welcome-logo,
+  .btn-ambient-glow, .btn-ripple-halo, .welcome-content {
+    animation: none !important;
+  }
+  .storm-flash, .plume { opacity: 0; }
+  .rain, .ash, .embers { display: none; }
+}
+@media (max-width: 640px) {
+  .btn-inner-content { padding: 20px 54px; gap: 12px; }
+  .welcome-logo { width: 84vw; }
+  .home-btn { width: 56px; height: 56px; font-size: 20px; }
+  .caldera { bottom: 17%; }
+}
+
+
+/* ================================================================
+   ARCADE BUTTON — matches the in-game theme
+   ----------------------------------------------------------------
+   Same recipe the game's HUD and menus use, so the kiosk welcome
+   screen and the game itself read as one product: a thick cream
+   outline, a warm gradient face, a gloss band across the top half,
+   and a hard bottom rim that collapses when pressed.
+   Appended last so it overrides the pill styling above.
+   ================================================================ */
+/* Sits square. The in-game HUD button carries a slight tilt because it
+   is one element in a busy playfield; here it is the only control on a
+   still, centred composition, where a tilt just reads as misaligned. */
+.start-btn { transform: none; }
+
+.btn-inner-content {
+  gap: 16px;
+  padding: 22px 68px;
+  border: 6px solid #fffdf6;                 /* the cream outline */
+  border-radius: 22px;                       /* rounded rect, not a pill */
+  background: linear-gradient(180deg, #ffd75f 0%, #ffae30 46%, #f2861d 100%);
+  color: #fff;
+  box-shadow:
+    0 8px 0 rgba(226, 124, 38, 0.95),        /* hard bottom rim */
+    0 16px 28px rgba(0, 0, 0, 0.45),
+    inset 0 -8px 0 rgba(197, 88, 17, 0.42),
+    inset 0 4px 0 rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+/* Gloss across the upper half — what makes it read as moulded plastic */
+.btn-inner-content::before {
+  content: '';
+  position: absolute;
+  left: 10px; right: 10px; top: 4px;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.10) 70%, rgba(255,255,255,0) 100%);
+  border-radius: 15px 15px 50% 50% / 15px 15px 100% 100%;
+  pointer-events: none;
+}
+.btn-text {
+  font-size: clamp(34px, 4.6vw, 48px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-shadow:
+    0 3px 0 rgba(190, 86, 18, 0.95),
+    0 5px 7px rgba(120, 50, 10, 0.45);
+}
+.btn-icon, .btn-arrow {
+  color: #ffffff;
+  filter: drop-shadow(0 3px 0 rgba(190, 86, 18, 0.9));
+}
+.start-btn:active .btn-inner-content {
+  transform: translateY(6px);
+  box-shadow:
+    0 2px 0 rgba(226, 124, 38, 0.95),
+    0 5px 12px rgba(0, 0, 0, 0.4),
+    inset 0 -4px 0 rgba(197, 88, 17, 0.4),
+    inset 0 3px 0 rgba(255, 255, 255, 0.5);
+}
+/* The halo tracked the old pill shape, so square it off to the new one. */
+.btn-ripple-halo { border-radius: 26px; inset: -10px; }
+.btn-ambient-glow { border-radius: 30px; }
+
+/* ---- Home button: same moulded treatment, quiet slate role ---- */
+.home-btn {
+  border: 4px solid #fffdf6;
+  background: linear-gradient(180deg, #9fb0c6 0%, #637792 50%, #4d6079 100%);
+  color: #fff;
+  box-shadow:
+    0 5px 0 rgba(48, 62, 82, 0.9),
+    0 9px 16px rgba(0, 0, 0, 0.4),
+    inset 0 3px 0 rgba(255, 255, 255, 0.3);
+}
+.home-btn:hover { background: linear-gradient(180deg, #b0c0d4 0%, #71849e 50%, #586c87 100%); color: #fff; }
+.home-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(48,62,82,0.9), 0 3px 8px rgba(0,0,0,0.35); }
+
+
+/* (The welcome screen's volume control was removed: sound is now set in
+   the game's own menu, and this page just follows that level.) */
+
+
+
+/* ================================================================
+   TAGLINE — "Get Saved or Get Buried!"
+   ----------------------------------------------------------------
+   Built to read as part of the logo lockup rather than as a caption:
+   a heavy condensed face, a warm gradient fill clipped to the text,
+   a dark carved edge, and the same amber glow the logo halo and the
+   start button share. The ::before layer draws the outline behind
+   the gradient, because a gradient fill and a text stroke cannot be
+   applied to the same layer without the stroke covering the fill.
+   ================================================================ */
+.tagline {
+  margin: 0;
+  text-align: center;
+  line-height: 1;
+  /* Sits closer to the logo than to the button, so the two read as one
+     unit and the call to action stays clearly separate. */
+  margin-top: clamp(-10px, -1vh, -4px);
+  filter: drop-shadow(0 3px 0 rgba(92, 38, 8, 0.85))
+          drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55))
+          drop-shadow(0 0 22px rgba(249, 160, 63, 0.35));
+  animation: taglineGlow 4.4s ease-in-out infinite alternate;
+}
+.tagline-text {
+  position: relative;
+  display: inline-block;
+  font-family: 'Teko', 'Bebas Neue', 'Impact', 'Inter', sans-serif;
+  font-weight: 900;
+  font-size: clamp(26px, 4.4vw, 52px);
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* Warm metal gradient, clipped to the glyphs. */
+  background: linear-gradient(180deg, #fff6d5 0%, #ffd166 34%, #f9a03f 62%, #e0651a 100%);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+/* The carved edge, drawn behind the gradient face. */
+.tagline-text::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0; top: 0;
+  z-index: -1;
+  -webkit-text-fill-color: #4a1f07;
+  color: #4a1f07;
+  -webkit-text-stroke: 7px #4a1f07;
+  background: none;
+}
+@keyframes taglineGlow {
+  from { filter: drop-shadow(0 3px 0 rgba(92, 38, 8, 0.85))
+                 drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55))
+                 drop-shadow(0 0 14px rgba(249, 160, 63, 0.22)); }
+  to   { filter: drop-shadow(0 3px 0 rgba(92, 38, 8, 0.85))
+                 drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55))
+                 drop-shadow(0 0 30px rgba(255, 190, 90, 0.55)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tagline { animation: none !important; }
+}
+@media (max-width: 480px) {
+  .tagline-text { font-size: clamp(20px, 6.2vw, 34px); letter-spacing: 0.03em; }
+  .tagline-text::before { -webkit-text-stroke-width: 5px; }
+}
+
+
+/* ================================================================
+   LAHAR DESCENDING THE VOLCANO
+   ----------------------------------------------------------------
+   The welcome screen had a volcano, weather and a plume but no
+   lahar — the one thing the game is actually about. These flows
+   run down the gullies already drawn in the artwork, using the
+   same smoldering palette as the in-game flow, so the screen sells
+   the subject before a word is read.
+
+   Built from dashed strokes with an animating dash-offset. That is
+   deliberate over a particle system: it is two composited layers
+   the GPU can handle on a kiosk, it loops seamlessly, and the
+   offset only ever decreases — so the material always travels DOWN
+   the mountain and can never appear to crawl back toward the crater.
+   ================================================================ */
+.lahar-flows .lahar {
+  stroke: #5a2a17;                       /* dark volcanic mud, not lava */
+  stroke-dasharray: 46 150;
+  opacity: 0.85;
+  animation: laharDescend 7s linear infinite;
+}
+.lahar-cores .lahar-core {
+  stroke: #c4501c;                       /* the hot seam inside it */
+  stroke-dasharray: 26 170;
+  opacity: 0.75;
+  animation: laharDescend 7s linear infinite, laharEmberPulse 2.6s ease-in-out infinite;
+}
+/* Staggered so the five channels never march in lockstep. */
+.lf1 { animation-delay: 0s;    stroke-dasharray: 52 160; }
+.lf2 { animation-delay: -2.4s; animation-duration: 8.4s; }
+.lf3 { animation-delay: -4.1s; animation-duration: 6.2s; }
+.lf4 { animation-delay: -1.2s; animation-duration: 9s; }
+.lf5 { animation-delay: -5.6s; animation-duration: 7.6s; }
+.lc1 { animation-delay: 0s,    -0.4s; }
+.lc3 { animation-delay: -4.1s, -1.1s; animation-duration: 6.2s, 2.6s; }
+.lc5 { animation-delay: -5.6s, -1.9s; animation-duration: 7.6s, 2.6s; }
+
+/* Negative offset only: the dash pattern travels along the path in a
+   single direction, which is what keeps the flow reading as downhill. */
+@keyframes laharDescend {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -196; }
+}
+@keyframes laharEmberPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.9; }
+}
+
+/* The caldera answers the flows: a slow swell as fresh material is shed. */
+.caldera-glow { animation: calderaBreath 5.5s ease-in-out infinite, calderaSurge 11s ease-in-out infinite; }
+@keyframes calderaSurge {
+  0%, 62%, 100% { filter: none; }
+  72%           { filter: drop-shadow(0 0 14px rgba(255, 138, 40, 0.75)); }
+  84%           { filter: drop-shadow(0 0 6px rgba(255, 138, 40, 0.3)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lahar-flows .lahar, .lahar-cores .lahar-core { animation: none !important; }
+  .caldera-glow { animation: calderaBreath 5.5s ease-in-out infinite !important; }
+}
+
+
+/* ---- Performance ----
+   The first version put a drop-shadow filter on each of the eight animated
+   strokes for the heat glow. Filters on animating SVG are re-rasterised
+   every frame and it cost ~30% of the frame budget on the welcome screen
+   (18.9 -> 13.2 fps), which is not acceptable on a kiosk.
+
+   The glow is now a wide, soft-coloured stroke drawn UNDER the flow on the
+   same animated path — visually near-identical, but a plain stroke the GPU
+   composites for free instead of a per-frame filter pass. */
+.lahar-flows .lahar {
+  paint-order: stroke;
+  stroke-linejoin: round;
+}
+.lahar-cores .lahar-core {
+  /* A soft halo without a filter: a translucent outer stroke of the same
+     warm colour, painted beneath the bright core. */
+  stroke: #c4501c;
+  paint-order: stroke;
+}
+.lahar-glow {
+  stroke: rgba(196, 80, 28, 0.22);
+  stroke-linecap: round;
+  fill: none;
+  animation: laharDescend 7s linear infinite;
+}

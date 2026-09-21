@@ -1,0 +1,187 @@
+import {
+  Component,
+  OnInit,
+  ViewChild,
+  ElementRef,
+  signal
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { getAutocompleteMatches, initBM25 } from './pinatubo-engine';
+import { PinatuboAiService } from './pinatubo-ai.service';
+import { Router } from "@angular/router";
+
+export interface ChatMessage {
+  role: 'apo' | 'user';
+  paragraphs: string[];
+}
+
+@Component({
+  selector: 'app-apo-pinatubo',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './apo-pinatubo.html',
+  styleUrls: ['./apo-pinatubo.css']
+})
+export class ApoPinatubo implements OnInit {
+  @ViewChild('chatEl') private chatEl?: ElementRef<HTMLDivElement>;
+  @ViewChild('queryInput') private queryInputEl?: ElementRef<HTMLInputElement>;
+
+  messages = signal<ChatMessage[]>([]);
+  thinking = signal<boolean>(false);
+  acItems = signal<string[]>([]);
+  acIdx = signal<number>(-1);
+
+  query = '';
+
+  // Starter prompts shown until the conversation gets going; each one
+  // is removed from this list once asked (see askStarter()) so it
+  // doesn't keep reappearing as a suggestion later in the same session.
+  starters: string[] = [
+    "When did Mt. Pinatubo erupt?",
+    "How many people died in the eruption?",
+    "What is lahar?",
+    "Who are the Aeta people?",
+    "What happened to Clark Air Base?",
+    "Who is Apu Namalyari?"
+  ];
+
+  constructor(private router: Router, private ai: PinatuboAiService) {}
+
+  goBack(): void {
+    const previous = sessionStorage.getItem('kioskPreviousRoute');
+    if (previous && previous !== '/apo-pinatubo') {
+      this.router.navigateByUrl(previous);
+    } else {
+      this.router.navigate(['/menu']);
+    }
+  }
+
+
+  ngOnInit(): void {
+    // Warm up the local retrieval index so the first real question
+    // doesn't pay the indexing cost on top of network latency.
+    initBM25();
+
+    this.addBotMessage(
+      'Malaus ka! Welcome to the Apung Namalyari AI. \n\n' +
+      'Ask me anything about 1991 eruption, lahar, or the Aeta People.'
+    );
+  }
+
+  private scrollToBottom(): void {
+    requestAnimationFrame(() => {
+      if (this.chatEl) {
+        const el = this.chatEl.nativeElement;
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+  }
+
+  private addBotMessage(text: string): void {
+    const paragraphs = text
+      .split('\n\n')
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+
+    this.messages.update(msgs => [
+      ...msgs,
+      { role: 'apo', paragraphs }
+    ]);
+    this.scrollToBottom();
+  }
+
+  private addUserMessage(text: string): void {
+    this.messages.update(msgs => [
+      ...msgs,
+      { role: 'user', paragraphs: [text] }
+    ]);
+    this.scrollToBottom();
+  }
+
+  onInput(): void {
+    const matches = getAutocompleteMatches(this.query);
+    this.acItems.set(matches);
+    this.acIdx.set(-1);
+  }
+
+  onKeydown(event: KeyboardEvent): void {
+    const items = this.acItems();
+    if (items.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.acIdx.update(i => (i < items.length - 1 ? i + 1 : 0));
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.acIdx.update(i => (i > 0 ? i - 1 : items.length - 1));
+        return;
+      }
+      if (event.key === 'Enter' && this.acIdx() >= 0) {
+        event.preventDefault();
+        this.selectAC(items[this.acIdx()]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        this.clearAC();
+        return;
+      }
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.handleAsk();
+    }
+  }
+
+  selectAC(item: string): void {
+    this.query = item;
+    this.clearAC();
+    this.handleAsk();
+  }
+
+  clearAC(): void {
+    this.acItems.set([]);
+    this.acIdx.set(-1);
+  }
+
+  highlightAC(item: string): string {
+    if (!this.query.trim()) return item;
+    const q = this.query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${q})`, 'gi');
+    return item.replace(regex, '<mark>$1</mark>');
+  }
+
+  askStarter(q: string): void {
+    this.starters = this.starters.filter(s => s !== q);
+    this.query = q;
+    this.handleAsk();
+  }
+
+  async handleAsk(): Promise<void> {
+    const q = this.query.trim();
+    if (!q || this.thinking()) return;
+
+    this.addUserMessage(q);
+    this.query = '';
+    this.clearAC();
+    this.thinking.set(true);
+    this.scrollToBottom();
+
+    // No try/catch here is intentional, not an oversight: PinatuboAiService.ask()
+    // always resolves with a valid AIAnswer, even on failure (it catches
+    // everything internally and returns an apology message instead of
+    // throwing). If that contract ever changes — e.g. ask() is modified to
+    // throw in some new case — a catch block belongs here too, or a
+    // rejected promise will bypass addBotMessage() and leave nothing
+    // added to the chat, though `finally` below will still reset `thinking`.
+    try {
+      const ans = await this.ai.ask(q);
+      this.addBotMessage(ans.text);
+    } finally {
+      this.thinking.set(false);
+      setTimeout(() => this.queryInputEl?.nativeElement.focus(), 50);
+    }
+  }
+}

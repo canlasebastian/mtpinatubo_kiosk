@@ -1,0 +1,131 @@
+<div class="nav-bar fixed top-0 w-full bg-transparent z-20 pointer-events-none">
+  <div class="nav-container px-10 py-7 flex justify-between">
+    <div class="nav-logo">
+      <a href=""><img src="/assets/images/logos/mainlogo.png" alt="Main Logo"></a>
+    </div>
+
+    <button 
+      (click)="goBack()" 
+      class="home pt-5 pointer-events-auto cursor-pointer relative z-50 focus:outline-none bg-transparent border-none block" 
+      aria-label="Back to previous page"
+    >
+      <i class="fa-solid fa-circle-chevron-left text-7xl text-[#D5A822]"></i>
+    </button>
+  </div>
+</div>
+
+<!-- Background Music -->
+<audio 
+  #bgMusic 
+  autoplay 
+  loop 
+  muted 
+>
+  <source src="/assets/audio/bgmusic.mp3" type="audio/mpeg">
+</audio>
+
+<!-- Menu Button (Left Side) -->
+<button
+  (click)="toggleMenu()"
+  class="fixed bottom-18 left-15 z-50 cursor-pointer focus:outline-none bg-transparent border-4 border-white rounded-full p-4 pointer-events-auto hover:scale-110 transition-transform"
+  aria-label="Toggle menu"
+>
+  <i
+    class="fa-solid text-4xl text-white"
+    [ngClass]="isMenuOpen ? 'fa-xmark' : 'fa-ellipsis'"
+  ></i>
+</button>
+
+<!-- Menu Dropdown -->
+<div 
+  *ngIf="isMenuOpen"
+  class="fixed bottom-40 left-15 z-50 bg-transparent border-4 border-white rounded-full p-4 pointer-events-auto flex flex-col gap-6"
+>
+  <!-- Toggle Music Button -->
+  <button
+    (click)="toggleMusic()"
+    class="flex items-center gap-3 text-white hover:text-[#D5A822] transition-colors"
+    [attr.aria-label]="isMusicPlaying ? 'Mute music' : 'Play music'"
+  >
+    <i
+      class="fa-solid text-4xl"
+      [ngClass]="isMusicPlaying ? 'fa-volume-high' : 'fa-volume-mute'"
+    ></i>
+  </button>
+
+  <!-- Toggle View Button -->
+  <button
+    (click)="toggleViewMode()"
+    class="flex items-center gap-3 text-white hover:text-[#D5A822] transition-colors"
+    [attr.aria-label]="viewMode === 'carousel' ? 'Switch to grid view' : 'Switch to carousel view'"
+  >
+    <i
+      class="fa-solid text-4xl"
+      [ngClass]="viewMode === 'carousel' ? 'fa-bars' : 'fa-images'"
+    ></i>
+  </button>
+</div>
+
+<div class="layout-container" [ngClass]="{'grid-mode': viewMode === 'grid'}">
+  <!-- Video Background Layer -->
+  <div class="bg-layer">
+    <video #bgVideo autoplay loop muted playsinline class="video-background">
+      <source src="/assets/videos/ptvid4.mp4" type="video/mp4">
+    </video>
+    <div class="gradient-overlay"></div>
+  </div>
+
+  <!-- CAROUSEL VIEW -->
+  <ng-container *ngIf="viewMode === 'carousel'">
+    <div #sliderTrack class="slider-track" (scroll)="onTrackScroll($event)">
+      <div
+        *ngFor="let slide of slides; let i = index"
+        class="polaroid-card"
+        [ngClass]="{'is-active': i === activeIndex}"
+        (click)="setActiveCard(i, slide.route, $event)"
+      >
+        <div class="pin top-l"></div>
+        <div class="pin top-r"></div>
+
+        <div class="image-inner">
+          <img
+            *ngFor="let imgPath of slide.images; let subIdx = index"
+            [src]="imgPath"
+            [alt]="slide.title"
+            class="carousel-img"
+            [ngClass]="{
+              'visible': (i === activeIndex && subIdx === slide.currentImageIndex) || (i !== activeIndex && subIdx === 0)
+            }"
+          >
+        </div>
+
+        <div class="pin bot-l"></div>
+        <div class="pin bot-r"></div>
+      </div>
+    </div>
+
+    <div class="caption-block">
+      <h2 class="caption-heading">{{ slides[activeIndex]?.captionTitle }}</h2>
+      <p class="caption-body">{{ slides[activeIndex]?.description }}</p>
+    </div>
+  </ng-container>
+
+  <!-- GRID (ROW) VIEW -->
+  <ng-container *ngIf="viewMode === 'grid'">
+    <div class="grid-rows-container mt-30">
+      <div
+        *ngFor="let slide of slides; let i = index"
+        class="grid-row-card"
+        (click)="onGridCardClick(slide.route, $event)"
+      >
+        <img [src]="slide.images[0]" [alt]="slide.captionTitle" class="grid-row-img">
+        <div class="grid-row-overlay"></div>
+        <div class="grid-row-text">
+          <h3 class="grid-row-title">{{ slide.captionTitle }}</h3>
+          <p class="grid-row-desc">{{ slide.description }}</p>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+</div>
